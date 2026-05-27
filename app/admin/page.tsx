@@ -48,7 +48,9 @@ export default function AdminPage() {
   const [memoryPosts, setMemoryPosts] = useState<MemoryPost[]>([]);
   const [notices, setNotices] = useState<NoticeItem[]>([]);
 
-  const [password, setPassword] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [currentAdminEmail, setCurrentAdminEmail] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [loginError, setLoginError] = useState("");
 
@@ -56,40 +58,72 @@ export default function AdminPage() {
   const [noticeDate, setNoticeDate] = useState("");
   const [noticeContent, setNoticeContent] = useState("");
   const [noticePublished, setNoticePublished] = useState(true);
-
   const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
 
-  const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
-
   useEffect(() => {
-    const savedAdmin = sessionStorage.getItem("jinan-art-admin");
-
-    if (savedAdmin === "true") {
-      setIsAdmin(true);
-      fetchAllData();
-    }
+    checkExistingSession();
   }, []);
 
-  const handleLogin = () => {
-    if (!adminPassword) {
-      setLoginError("관리자 비밀번호 환경변수가 설정되지 않았습니다.");
-      return;
-    }
+  const checkExistingSession = async () => {
+    const { data } = await supabase.auth.getSession();
 
-    if (password === adminPassword) {
-      setIsAdmin(true);
-      setLoginError("");
-      sessionStorage.setItem("jinan-art-admin", "true");
-      fetchAllData();
-    } else {
-      setLoginError("비밀번호가 맞지 않습니다.");
+    if (data.session?.user?.email) {
+      await checkAdminAccess(data.session.user.email);
     }
   };
 
-  const handleLogout = () => {
-    sessionStorage.removeItem("jinan-art-admin");
+  const checkAdminAccess = async (email: string) => {
+    const { data, error } = await supabase.rpc("is_admin");
+
+    if (error) {
+      console.log(error);
+      setIsAdmin(false);
+      setLoginError("관리자 권한 확인 중 오류가 발생했습니다.");
+      return;
+    }
+
+    if (data === true) {
+      setIsAdmin(true);
+      setCurrentAdminEmail(email);
+      setLoginError("");
+      fetchAllData();
+      return;
+    }
+
+    await supabase.auth.signOut();
     setIsAdmin(false);
-    setPassword("");
+    setCurrentAdminEmail("");
+    setLoginError("관리자 권한이 없는 계정입니다.");
+  };
+
+  const handleLogin = async () => {
+    if (!adminEmail || !adminPassword) {
+      setLoginError("이메일과 비밀번호를 입력해주세요.");
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: adminEmail,
+      password: adminPassword,
+    });
+
+    if (error) {
+      console.log(error);
+      setLoginError("로그인 실패. 이메일 또는 비밀번호를 확인해주세요.");
+      return;
+    }
+
+    if (data.user.email) {
+      await checkAdminAccess(data.user.email);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAdmin(false);
+    setCurrentAdminEmail("");
+    setAdminEmail("");
+    setAdminPassword("");
   };
 
   const fetchAllData = async () => {
@@ -229,10 +263,7 @@ export default function AdminPage() {
       }
     }
 
-    const { error } = await supabase
-      .from("events")
-      .delete()
-      .eq("id", event.id);
+    const { error } = await supabase.from("events").delete().eq("id", event.id);
 
     if (error) {
       console.log(error);
@@ -427,15 +458,23 @@ export default function AdminPage() {
           <h1 className="mb-4 text-4xl font-black">관리자 로그인</h1>
 
           <p className="mb-8 leading-relaxed text-gray-600">
-            행사, 진안의 시간, 공지사항을 관리하려면 비밀번호를 입력해주세요.
+            Supabase 관리자 계정으로 로그인해주세요.
           </p>
+
+          <input
+            type="email"
+            className="mb-4 w-full rounded-2xl border border-gray-300 p-4"
+            placeholder="관리자 이메일"
+            value={adminEmail}
+            onChange={(e) => setAdminEmail(e.target.value)}
+          />
 
           <input
             type="password"
             className="mb-4 w-full rounded-2xl border border-gray-300 p-4"
             placeholder="관리자 비밀번호"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            value={adminPassword}
+            onChange={(e) => setAdminPassword(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 handleLogin();
@@ -453,7 +492,7 @@ export default function AdminPage() {
             onClick={handleLogin}
             className="w-full rounded-2xl bg-black py-4 text-lg font-bold text-white transition hover:bg-gray-800"
           >
-            관리자 접속
+            관리자 로그인
           </button>
         </div>
       </main>
@@ -479,6 +518,10 @@ export default function AdminPage() {
 
               <p className="leading-relaxed text-gray-600">
                 행사, 진안의 시간 사진 기록, 공지사항을 관리합니다.
+              </p>
+
+              <p className="mt-3 text-sm font-semibold text-gray-500">
+                로그인 계정: {currentAdminEmail}
               </p>
             </div>
 
