@@ -7,10 +7,15 @@ type EventItem = {
   id: string;
   title: string;
   event_date: string;
+  start_date?: string;
+  end_date?: string;
   location: string;
+  author?: string;
   description: string;
   approved: boolean;
   image_url?: string;
+  upload_type?: string;
+  video_url?: string;
 };
 
 type MemoryPost = {
@@ -25,48 +30,34 @@ type MemoryPost = {
   created_at?: string;
 };
 
-type EventEditForm = {
+type NoticeItem = {
+  id: string;
   title: string;
-  event_date: string;
-  location: string;
-  description: string;
-};
-
-type MemoryEditForm = {
-  title: string;
-  memory_date: string;
-  location: string;
-  person_name: string;
-  description: string;
+  content: string;
+  notice_date?: string;
+  published: boolean;
+  created_at?: string;
 };
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<"events" | "memory">("events");
+  const [activeTab, setActiveTab] = useState<"events" | "memory" | "notices">(
+    "events"
+  );
 
   const [events, setEvents] = useState<EventItem[]>([]);
   const [memoryPosts, setMemoryPosts] = useState<MemoryPost[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [notices, setNotices] = useState<NoticeItem[]>([]);
 
   const [password, setPassword] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [loginError, setLoginError] = useState("");
 
-  const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [eventEditForm, setEventEditForm] = useState<EventEditForm>({
-    title: "",
-    event_date: "",
-    location: "",
-    description: "",
-  });
+  const [noticeTitle, setNoticeTitle] = useState("");
+  const [noticeDate, setNoticeDate] = useState("");
+  const [noticeContent, setNoticeContent] = useState("");
+  const [noticePublished, setNoticePublished] = useState(true);
 
-  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
-  const [memoryEditForm, setMemoryEditForm] = useState<MemoryEditForm>({
-    title: "",
-    memory_date: "",
-    location: "",
-    person_name: "",
-    description: "",
-  });
+  const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
 
   const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
 
@@ -81,7 +72,7 @@ export default function AdminPage() {
 
   const handleLogin = () => {
     if (!adminPassword) {
-      setLoginError(".env.local에 관리자 비밀번호가 설정되지 않았습니다.");
+      setLoginError("관리자 비밀번호 환경변수가 설정되지 않았습니다.");
       return;
     }
 
@@ -99,14 +90,10 @@ export default function AdminPage() {
     sessionStorage.removeItem("jinan-art-admin");
     setIsAdmin(false);
     setPassword("");
-    setEvents([]);
-    setMemoryPosts([]);
   };
 
   const fetchAllData = async () => {
-    setLoading(true);
-    await Promise.all([fetchEvents(), fetchMemoryPosts()]);
-    setLoading(false);
+    await Promise.all([fetchEvents(), fetchMemoryPosts(), fetchNotices()]);
   };
 
   const fetchEvents = async () => {
@@ -134,11 +121,24 @@ export default function AdminPage() {
 
     if (error) {
       console.log(error);
-      alert("진안의 시간 목록을 불러오지 못했습니다.");
       return;
     }
 
     setMemoryPosts(data || []);
+  };
+
+  const fetchNotices = async () => {
+    const { data, error } = await supabase
+      .from("notices")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.log(error);
+      return;
+    }
+
+    setNotices(data || []);
   };
 
   const getImagePathFromUrl = (imageUrl: string | undefined, bucket: string) => {
@@ -177,12 +177,6 @@ export default function AdminPage() {
   };
 
   const approveEvent = async (id: string) => {
-    const confirmApprove = window.confirm("이 행사를 승인하시겠습니까?");
-
-    if (!confirmApprove) {
-      return;
-    }
-
     const { error } = await supabase
       .from("events")
       .update({ approved: true })
@@ -199,14 +193,6 @@ export default function AdminPage() {
   };
 
   const cancelApproveEvent = async (id: string) => {
-    const confirmCancel = window.confirm(
-      "이 행사의 승인을 취소하시겠습니까?\n승인 취소 후에는 메인페이지에서 보이지 않습니다."
-    );
-
-    if (!confirmCancel) {
-      return;
-    }
-
     const { error } = await supabase
       .from("events")
       .update({ approved: false })
@@ -222,83 +208,25 @@ export default function AdminPage() {
     fetchEvents();
   };
 
-  const startEditEvent = (event: EventItem) => {
-    setEditingEventId(event.id);
-    setEventEditForm({
-      title: event.title,
-      event_date: event.event_date,
-      location: event.location,
-      description: event.description,
-    });
-  };
-
-  const cancelEditEvent = () => {
-    setEditingEventId(null);
-    setEventEditForm({
-      title: "",
-      event_date: "",
-      location: "",
-      description: "",
-    });
-  };
-
-  const saveEditEvent = async (id: string) => {
-    if (
-      !eventEditForm.title ||
-      !eventEditForm.event_date ||
-      !eventEditForm.location ||
-      !eventEditForm.description
-    ) {
-      alert("수정할 내용을 모두 입력해주세요.");
-      return;
-    }
-
-    const confirmSave = window.confirm("수정한 내용을 저장하시겠습니까?");
-
-    if (!confirmSave) {
-      return;
-    }
-
-    const { error } = await supabase
-      .from("events")
-      .update({
-        title: eventEditForm.title,
-        event_date: eventEditForm.event_date,
-        location: eventEditForm.location,
-        description: eventEditForm.description,
-      })
-      .eq("id", id);
-
-    if (error) {
-      console.log(error);
-      alert("수정 실패");
-      return;
-    }
-
-    alert("수정 완료");
-    cancelEditEvent();
-    fetchEvents();
-  };
-
   const deleteEvent = async (event: EventItem) => {
     const confirmDelete = window.confirm(
-      `"${event.title}" 행사를 삭제하시겠습니까?\n행사 내용과 업로드된 이미지가 함께 삭제됩니다.\n삭제한 내용은 복구할 수 없습니다.`
+      `"${event.title}" 행사를 삭제하시겠습니까?\n이미지가 있으면 함께 삭제됩니다.`
     );
 
     if (!confirmDelete) {
       return;
     }
 
-    const imageDeleted = await deleteImageFromStorage(
-      event.image_url,
-      "event-images"
-    );
-
-    if (!imageDeleted) {
-      alert(
-        "이미지 삭제에 실패했습니다.\n행사 글 삭제를 중단합니다.\nSupabase Storage 권한을 확인해주세요."
+    if (event.image_url) {
+      const imageDeleted = await deleteImageFromStorage(
+        event.image_url,
+        "event-images"
       );
-      return;
+
+      if (!imageDeleted) {
+        alert("이미지 삭제 실패. 글 삭제를 중단합니다.");
+        return;
+      }
     }
 
     const { error } = await supabase
@@ -312,19 +240,11 @@ export default function AdminPage() {
       return;
     }
 
-    alert("행사와 이미지가 함께 삭제되었습니다.");
+    alert("행사 삭제 완료");
     fetchEvents();
   };
 
   const approveMemory = async (id: string) => {
-    const confirmApprove = window.confirm(
-      "이 사진 기록을 승인하시겠습니까?"
-    );
-
-    if (!confirmApprove) {
-      return;
-    }
-
     const { error } = await supabase
       .from("memory_posts")
       .update({ approved: true })
@@ -341,14 +261,6 @@ export default function AdminPage() {
   };
 
   const cancelApproveMemory = async (id: string) => {
-    const confirmCancel = window.confirm(
-      "이 사진 기록의 승인을 취소하시겠습니까?\n승인 취소 후에는 진안의 시간 페이지에서 보이지 않습니다."
-    );
-
-    if (!confirmCancel) {
-      return;
-    }
-
     const { error } = await supabase
       .from("memory_posts")
       .update({ approved: false })
@@ -364,81 +276,25 @@ export default function AdminPage() {
     fetchMemoryPosts();
   };
 
-  const startEditMemory = (post: MemoryPost) => {
-    setEditingMemoryId(post.id);
-    setMemoryEditForm({
-      title: post.title,
-      memory_date: post.memory_date || "",
-      location: post.location || "",
-      person_name: post.person_name || "",
-      description: post.description,
-    });
-  };
-
-  const cancelEditMemory = () => {
-    setEditingMemoryId(null);
-    setMemoryEditForm({
-      title: "",
-      memory_date: "",
-      location: "",
-      person_name: "",
-      description: "",
-    });
-  };
-
-  const saveEditMemory = async (id: string) => {
-    if (!memoryEditForm.title || !memoryEditForm.description) {
-      alert("제목과 설명은 반드시 입력해주세요.");
-      return;
-    }
-
-    const confirmSave = window.confirm("수정한 내용을 저장하시겠습니까?");
-
-    if (!confirmSave) {
-      return;
-    }
-
-    const { error } = await supabase
-      .from("memory_posts")
-      .update({
-        title: memoryEditForm.title,
-        memory_date: memoryEditForm.memory_date,
-        location: memoryEditForm.location,
-        person_name: memoryEditForm.person_name,
-        description: memoryEditForm.description,
-      })
-      .eq("id", id);
-
-    if (error) {
-      console.log(error);
-      alert("수정 실패");
-      return;
-    }
-
-    alert("수정 완료");
-    cancelEditMemory();
-    fetchMemoryPosts();
-  };
-
   const deleteMemory = async (post: MemoryPost) => {
     const confirmDelete = window.confirm(
-      `"${post.title}" 사진 기록을 삭제하시겠습니까?\n사진 기록과 업로드된 이미지가 함께 삭제됩니다.\n삭제한 내용은 복구할 수 없습니다.`
+      `"${post.title}" 사진 기록을 삭제하시겠습니까?\n이미지가 있으면 함께 삭제됩니다.`
     );
 
     if (!confirmDelete) {
       return;
     }
 
-    const imageDeleted = await deleteImageFromStorage(
-      post.image_url,
-      "memory-images"
-    );
-
-    if (!imageDeleted) {
-      alert(
-        "이미지 삭제에 실패했습니다.\n사진 기록 삭제를 중단합니다.\nSupabase Storage 권한을 확인해주세요."
+    if (post.image_url) {
+      const imageDeleted = await deleteImageFromStorage(
+        post.image_url,
+        "memory-images"
       );
-      return;
+
+      if (!imageDeleted) {
+        alert("이미지 삭제 실패. 글 삭제를 중단합니다.");
+        return;
+      }
     }
 
     const { error } = await supabase
@@ -452,8 +308,112 @@ export default function AdminPage() {
       return;
     }
 
-    alert("사진 기록과 이미지가 함께 삭제되었습니다.");
+    alert("사진 기록 삭제 완료");
     fetchMemoryPosts();
+  };
+
+  const resetNoticeForm = () => {
+    setNoticeTitle("");
+    setNoticeDate("");
+    setNoticeContent("");
+    setNoticePublished(true);
+    setEditingNoticeId(null);
+  };
+
+  const saveNotice = async () => {
+    if (!noticeTitle || !noticeContent) {
+      alert("공지 제목과 내용을 입력해주세요.");
+      return;
+    }
+
+    if (editingNoticeId) {
+      const { error } = await supabase
+        .from("notices")
+        .update({
+          title: noticeTitle,
+          content: noticeContent,
+          notice_date: noticeDate,
+          published: noticePublished,
+        })
+        .eq("id", editingNoticeId);
+
+      if (error) {
+        console.log(error);
+        alert("공지 수정 실패");
+        return;
+      }
+
+      alert("공지 수정 완료");
+      resetNoticeForm();
+      fetchNotices();
+      return;
+    }
+
+    const { error } = await supabase.from("notices").insert([
+      {
+        title: noticeTitle,
+        content: noticeContent,
+        notice_date: noticeDate,
+        published: noticePublished,
+      },
+    ]);
+
+    if (error) {
+      console.log(error);
+      alert("공지 등록 실패");
+      return;
+    }
+
+    alert("공지 등록 완료");
+    resetNoticeForm();
+    fetchNotices();
+  };
+
+  const startEditNotice = (notice: NoticeItem) => {
+    setEditingNoticeId(notice.id);
+    setNoticeTitle(notice.title);
+    setNoticeDate(notice.notice_date || "");
+    setNoticeContent(notice.content);
+    setNoticePublished(notice.published);
+  };
+
+  const deleteNotice = async (notice: NoticeItem) => {
+    const confirmDelete = window.confirm(
+      `"${notice.title}" 공지사항을 삭제하시겠습니까?`
+    );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("notices")
+      .delete()
+      .eq("id", notice.id);
+
+    if (error) {
+      console.log(error);
+      alert("공지 삭제 실패");
+      return;
+    }
+
+    alert("공지 삭제 완료");
+    fetchNotices();
+  };
+
+  const toggleNoticePublished = async (notice: NoticeItem) => {
+    const { error } = await supabase
+      .from("notices")
+      .update({ published: !notice.published })
+      .eq("id", notice.id);
+
+    if (error) {
+      console.log(error);
+      alert("공개 상태 변경 실패");
+      return;
+    }
+
+    fetchNotices();
   };
 
   if (!isAdmin) {
@@ -467,8 +427,7 @@ export default function AdminPage() {
           <h1 className="mb-4 text-4xl font-black">관리자 로그인</h1>
 
           <p className="mb-8 leading-relaxed text-gray-600">
-            행사와 진안의 시간 기록을 관리하려면 관리자 비밀번호를
-            입력해주세요.
+            행사, 진안의 시간, 공지사항을 관리하려면 비밀번호를 입력해주세요.
           </p>
 
           <input
@@ -502,14 +461,12 @@ export default function AdminPage() {
   }
 
   const waitingEvents = events.filter((event) => !event.approved);
-  const approvedEvents = events.filter((event) => event.approved);
   const waitingMemory = memoryPosts.filter((post) => !post.approved);
-  const approvedMemory = memoryPosts.filter((post) => post.approved);
 
   return (
     <main className="min-h-screen bg-gray-100 px-4 py-10 text-black md:p-10">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-10 rounded-3xl bg-white p-6 shadow-lg md:p-8">
+        <div className="mb-8 rounded-3xl bg-white p-6 shadow-lg md:p-8">
           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="mb-3 text-xs tracking-[0.35em] text-gray-500">
@@ -521,8 +478,7 @@ export default function AdminPage() {
               </h1>
 
               <p className="leading-relaxed text-gray-600">
-                문화행사와 진안의 시간 사진 기록을 승인, 수정, 삭제할 수
-                있습니다.
+                행사, 진안의 시간 사진 기록, 공지사항을 관리합니다.
               </p>
             </div>
 
@@ -530,12 +486,12 @@ export default function AdminPage() {
               onClick={handleLogout}
               className="rounded-2xl border border-gray-300 px-5 py-3 font-bold text-gray-700 transition hover:bg-gray-100"
             >
-              관리자 로그아웃
+              로그아웃
             </button>
           </div>
         </div>
 
-        <div className="mb-8 grid gap-4 md:grid-cols-4">
+        <div className="mb-8 grid gap-4 md:grid-cols-5">
           <div className="rounded-3xl bg-white p-6 shadow">
             <p className="mb-2 text-sm text-gray-500">전체 행사</p>
             <p className="text-4xl font-black">{events.length}</p>
@@ -549,14 +505,21 @@ export default function AdminPage() {
           </div>
 
           <div className="rounded-3xl bg-white p-6 shadow">
-            <p className="mb-2 text-sm text-gray-500">전체 사진 기록</p>
-            <p className="text-4xl font-black">{memoryPosts.length}</p>
-          </div>
-
-          <div className="rounded-3xl bg-white p-6 shadow">
             <p className="mb-2 text-sm text-gray-500">사진 승인 대기</p>
             <p className="text-4xl font-black text-orange-600">
               {waitingMemory.length}
+            </p>
+          </div>
+
+          <div className="rounded-3xl bg-white p-6 shadow">
+            <p className="mb-2 text-sm text-gray-500">공지사항</p>
+            <p className="text-4xl font-black">{notices.length}</p>
+          </div>
+
+          <div className="rounded-3xl bg-white p-6 shadow">
+            <p className="mb-2 text-sm text-gray-500">공개 공지</p>
+            <p className="text-4xl font-black text-green-600">
+              {notices.filter((notice) => notice.published).length}
             </p>
           </div>
         </div>
@@ -583,21 +546,22 @@ export default function AdminPage() {
           >
             진안의 시간 관리
           </button>
+
+          <button
+            onClick={() => setActiveTab("notices")}
+            className={`rounded-2xl px-6 py-4 font-bold transition ${
+              activeTab === "notices"
+                ? "bg-black text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            공지사항 관리
+          </button>
         </div>
 
-        {loading ? (
-          <div className="rounded-3xl bg-white p-8 text-gray-500 shadow">
-            불러오는 중입니다...
-          </div>
-        ) : activeTab === "events" ? (
+        {activeTab === "events" && (
           <section>
-            <div className="mb-6">
-              <h2 className="text-3xl font-black">문화행사 관리</h2>
-              <p className="mt-2 text-gray-500">
-                승인 완료 {approvedEvents.length}개 · 승인 대기{" "}
-                {waitingEvents.length}개
-              </p>
-            </div>
+            <h2 className="mb-6 text-3xl font-black">문화행사 관리</h2>
 
             {events.length === 0 ? (
               <div className="rounded-3xl bg-white p-8 text-gray-500 shadow">
@@ -605,168 +569,104 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="grid gap-6">
-                {events.map((event) => {
-                  const isEditing = editingEventId === event.id;
+                {events.map((event) => (
+                  <div
+                    key={event.id}
+                    className="overflow-hidden rounded-3xl bg-white shadow-lg"
+                  >
+                    {event.upload_type === "video" && event.video_url ? (
+                      <div className="bg-gray-100 p-6">
+                        <p className="mb-3 text-sm font-bold text-gray-500">
+                          영상행사
+                        </p>
 
-                  return (
-                    <div
-                      key={event.id}
-                      className="overflow-hidden rounded-3xl bg-white shadow-lg"
-                    >
-                      {event.image_url && (
+                        <a
+                          href={event.video_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex rounded-2xl bg-red-600 px-6 py-3 font-bold text-white"
+                        >
+                          유튜브 영상 보기
+                        </a>
+                      </div>
+                    ) : (
+                      event.image_url && (
                         <img
                           src={event.image_url}
                           alt={event.title}
                           className="max-h-[680px] w-full bg-gray-100 object-contain"
                         />
+                      )
+                    )}
+
+                    <div className="p-6 md:p-8">
+                      <span
+                        className={`mb-5 inline-flex rounded-full px-4 py-2 text-sm font-bold ${
+                          event.approved
+                            ? "bg-green-100 text-green-700"
+                            : "bg-orange-100 text-orange-700"
+                        }`}
+                      >
+                        {event.approved ? "승인 완료" : "승인 대기"}
+                      </span>
+
+                      <p className="mb-2 text-sm text-gray-500">
+                        {event.event_date}
+                      </p>
+
+                      <h3 className="mb-4 text-3xl font-bold">
+                        {event.title}
+                      </h3>
+
+                      <p className="mb-3 font-semibold text-gray-600">
+                        장소: {event.location}
+                      </p>
+
+                      {event.author && (
+                        <p className="mb-5 text-sm text-gray-500">
+                          작성자: {event.author}
+                        </p>
                       )}
 
-                      <div className="p-6 md:p-8">
-                        <div className="mb-5">
-                          <span
-                            className={`inline-flex w-fit rounded-full px-4 py-2 text-sm font-bold ${
-                              event.approved
-                                ? "bg-green-100 text-green-700"
-                                : "bg-orange-100 text-orange-700"
-                            }`}
+                      <p className="mb-8 whitespace-pre-line leading-relaxed text-gray-700">
+                        {event.description}
+                      </p>
+
+                      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                        {!event.approved ? (
+                          <button
+                            onClick={() => approveEvent(event.id)}
+                            className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
                           >
-                            {event.approved ? "승인 완료" : "승인 대기"}
-                          </span>
-                        </div>
-
-                        {isEditing ? (
-                          <div className="grid gap-4">
-                            <input
-                              className="rounded-2xl border border-gray-300 p-4"
-                              placeholder="행사명"
-                              value={eventEditForm.title}
-                              onChange={(e) =>
-                                setEventEditForm({
-                                  ...eventEditForm,
-                                  title: e.target.value,
-                                })
-                              }
-                            />
-
-                            <input
-                              className="rounded-2xl border border-gray-300 p-4"
-                              placeholder="행사 날짜"
-                              value={eventEditForm.event_date}
-                              onChange={(e) =>
-                                setEventEditForm({
-                                  ...eventEditForm,
-                                  event_date: e.target.value,
-                                })
-                              }
-                            />
-
-                            <input
-                              className="rounded-2xl border border-gray-300 p-4"
-                              placeholder="행사 장소"
-                              value={eventEditForm.location}
-                              onChange={(e) =>
-                                setEventEditForm({
-                                  ...eventEditForm,
-                                  location: e.target.value,
-                                })
-                              }
-                            />
-
-                            <textarea
-                              className="min-h-40 rounded-2xl border border-gray-300 p-4"
-                              placeholder="행사 소개"
-                              value={eventEditForm.description}
-                              onChange={(e) =>
-                                setEventEditForm({
-                                  ...eventEditForm,
-                                  description: e.target.value,
-                                })
-                              }
-                            />
-
-                            <div className="flex flex-col gap-3 sm:flex-row">
-                              <button
-                                onClick={() => saveEditEvent(event.id)}
-                                className="rounded-2xl bg-black px-6 py-4 font-bold text-white transition hover:bg-gray-800"
-                              >
-                                수정 저장
-                              </button>
-
-                              <button
-                                onClick={cancelEditEvent}
-                                className="rounded-2xl border border-gray-300 px-6 py-4 font-bold text-gray-700 transition hover:bg-gray-100"
-                              >
-                                수정 취소
-                              </button>
-                            </div>
-                          </div>
+                            승인하기
+                          </button>
                         ) : (
-                          <>
-                            <p className="mb-2 text-sm text-gray-500">
-                              {event.event_date}
-                            </p>
-
-                            <h3 className="mb-4 text-3xl font-bold">
-                              {event.title}
-                            </h3>
-
-                            <p className="mb-4 font-semibold text-gray-600">
-                              {event.location}
-                            </p>
-
-                            <p className="mb-8 whitespace-pre-line leading-relaxed text-gray-700">
-                              {event.description}
-                            </p>
-
-                            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                              {!event.approved ? (
-                                <button
-                                  onClick={() => approveEvent(event.id)}
-                                  className="rounded-2xl bg-black px-6 py-4 font-bold text-white transition hover:bg-gray-800"
-                                >
-                                  승인하기
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => cancelApproveEvent(event.id)}
-                                  className="rounded-2xl bg-orange-500 px-6 py-4 font-bold text-white transition hover:bg-orange-600"
-                                >
-                                  승인취소
-                                </button>
-                              )}
-
-                              <button
-                                onClick={() => startEditEvent(event)}
-                                className="rounded-2xl bg-blue-600 px-6 py-4 font-bold text-white transition hover:bg-blue-700"
-                              >
-                                수정하기
-                              </button>
-
-                              <button
-                                onClick={() => deleteEvent(event)}
-                                className="rounded-2xl bg-red-600 px-6 py-4 font-bold text-white transition hover:bg-red-700"
-                              >
-                                삭제하기
-                              </button>
-                            </div>
-                          </>
+                          <button
+                            onClick={() => cancelApproveEvent(event.id)}
+                            className="rounded-2xl bg-orange-500 px-6 py-4 font-bold text-white"
+                          >
+                            승인취소
+                          </button>
                         )}
+
+                        <button
+                          onClick={() => deleteEvent(event)}
+                          className="rounded-2xl bg-red-600 px-6 py-4 font-bold text-white"
+                        >
+                          삭제하기
+                        </button>
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             )}
           </section>
-        ) : (
+        )}
+
+        {activeTab === "memory" && (
           <section>
-            <div className="mb-6">
-              <h2 className="text-3xl font-black">진안의 시간 관리</h2>
-              <p className="mt-2 text-gray-500">
-                승인 완료 {approvedMemory.length}개 · 승인 대기{" "}
-                {waitingMemory.length}개
-              </p>
-            </div>
+            <h2 className="mb-6 text-3xl font-black">진안의 시간 관리</h2>
 
             {memoryPosts.length === 0 ? (
               <div className="rounded-3xl bg-white p-8 text-gray-500 shadow">
@@ -774,176 +674,201 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="grid gap-6">
-                {memoryPosts.map((post) => {
-                  const isEditing = editingMemoryId === post.id;
+                {memoryPosts.map((post) => (
+                  <div
+                    key={post.id}
+                    className="overflow-hidden rounded-3xl bg-white shadow-lg"
+                  >
+                    {post.image_url && (
+                      <img
+                        src={post.image_url}
+                        alt={post.title}
+                        className="max-h-[680px] w-full bg-gray-100 object-contain"
+                      />
+                    )}
 
-                  return (
-                    <div
-                      key={post.id}
-                      className="overflow-hidden rounded-3xl bg-white shadow-lg"
-                    >
-                      {post.image_url && (
-                        <img
-                          src={post.image_url}
-                          alt={post.title}
-                          className="max-h-[680px] w-full bg-gray-100 object-contain"
-                        />
+                    <div className="p-6 md:p-8">
+                      <span
+                        className={`mb-5 inline-flex rounded-full px-4 py-2 text-sm font-bold ${
+                          post.approved
+                            ? "bg-green-100 text-green-700"
+                            : "bg-orange-100 text-orange-700"
+                        }`}
+                      >
+                        {post.approved ? "승인 완료" : "승인 대기"}
+                      </span>
+
+                      <p className="mb-2 text-sm text-gray-500">
+                        {post.memory_date || "시기 미상"}
+                      </p>
+
+                      <h3 className="mb-4 text-3xl font-bold">
+                        {post.title}
+                      </h3>
+
+                      {post.location && (
+                        <p className="mb-3 font-semibold text-gray-600">
+                          장소: {post.location}
+                        </p>
                       )}
 
-                      <div className="p-6 md:p-8">
-                        <div className="mb-5">
-                          <span
-                            className={`inline-flex w-fit rounded-full px-4 py-2 text-sm font-bold ${
-                              post.approved
-                                ? "bg-green-100 text-green-700"
-                                : "bg-orange-100 text-orange-700"
-                            }`}
+                      {post.person_name && (
+                        <p className="mb-5 text-sm text-gray-500">
+                          제공: {post.person_name}
+                        </p>
+                      )}
+
+                      <p className="mb-8 whitespace-pre-line leading-relaxed text-gray-700">
+                        {post.description}
+                      </p>
+
+                      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                        {!post.approved ? (
+                          <button
+                            onClick={() => approveMemory(post.id)}
+                            className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
                           >
-                            {post.approved ? "승인 완료" : "승인 대기"}
-                          </span>
-                        </div>
-
-                        {isEditing ? (
-                          <div className="grid gap-4">
-                            <input
-                              className="rounded-2xl border border-gray-300 p-4"
-                              placeholder="제목"
-                              value={memoryEditForm.title}
-                              onChange={(e) =>
-                                setMemoryEditForm({
-                                  ...memoryEditForm,
-                                  title: e.target.value,
-                                })
-                              }
-                            />
-
-                            <input
-                              className="rounded-2xl border border-gray-300 p-4"
-                              placeholder="시기"
-                              value={memoryEditForm.memory_date}
-                              onChange={(e) =>
-                                setMemoryEditForm({
-                                  ...memoryEditForm,
-                                  memory_date: e.target.value,
-                                })
-                              }
-                            />
-
-                            <input
-                              className="rounded-2xl border border-gray-300 p-4"
-                              placeholder="장소"
-                              value={memoryEditForm.location}
-                              onChange={(e) =>
-                                setMemoryEditForm({
-                                  ...memoryEditForm,
-                                  location: e.target.value,
-                                })
-                              }
-                            />
-
-                            <input
-                              className="rounded-2xl border border-gray-300 p-4"
-                              placeholder="제공자"
-                              value={memoryEditForm.person_name}
-                              onChange={(e) =>
-                                setMemoryEditForm({
-                                  ...memoryEditForm,
-                                  person_name: e.target.value,
-                                })
-                              }
-                            />
-
-                            <textarea
-                              className="min-h-40 rounded-2xl border border-gray-300 p-4"
-                              placeholder="설명"
-                              value={memoryEditForm.description}
-                              onChange={(e) =>
-                                setMemoryEditForm({
-                                  ...memoryEditForm,
-                                  description: e.target.value,
-                                })
-                              }
-                            />
-
-                            <div className="flex flex-col gap-3 sm:flex-row">
-                              <button
-                                onClick={() => saveEditMemory(post.id)}
-                                className="rounded-2xl bg-black px-6 py-4 font-bold text-white transition hover:bg-gray-800"
-                              >
-                                수정 저장
-                              </button>
-
-                              <button
-                                onClick={cancelEditMemory}
-                                className="rounded-2xl border border-gray-300 px-6 py-4 font-bold text-gray-700 transition hover:bg-gray-100"
-                              >
-                                수정 취소
-                              </button>
-                            </div>
-                          </div>
+                            승인하기
+                          </button>
                         ) : (
-                          <>
-                            <p className="mb-2 text-sm text-gray-500">
-                              {post.memory_date || "시기 미상"}
-                            </p>
-
-                            <h3 className="mb-4 text-3xl font-bold">
-                              {post.title}
-                            </h3>
-
-                            {post.location && (
-                              <p className="mb-3 font-semibold text-gray-600">
-                                장소: {post.location}
-                              </p>
-                            )}
-
-                            {post.person_name && (
-                              <p className="mb-5 text-sm text-gray-500">
-                                제공: {post.person_name}
-                              </p>
-                            )}
-
-                            <p className="mb-8 whitespace-pre-line leading-relaxed text-gray-700">
-                              {post.description}
-                            </p>
-
-                            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                              {!post.approved ? (
-                                <button
-                                  onClick={() => approveMemory(post.id)}
-                                  className="rounded-2xl bg-black px-6 py-4 font-bold text-white transition hover:bg-gray-800"
-                                >
-                                  승인하기
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => cancelApproveMemory(post.id)}
-                                  className="rounded-2xl bg-orange-500 px-6 py-4 font-bold text-white transition hover:bg-orange-600"
-                                >
-                                  승인취소
-                                </button>
-                              )}
-
-                              <button
-                                onClick={() => startEditMemory(post)}
-                                className="rounded-2xl bg-blue-600 px-6 py-4 font-bold text-white transition hover:bg-blue-700"
-                              >
-                                수정하기
-                              </button>
-
-                              <button
-                                onClick={() => deleteMemory(post)}
-                                className="rounded-2xl bg-red-600 px-6 py-4 font-bold text-white transition hover:bg-red-700"
-                              >
-                                삭제하기
-                              </button>
-                            </div>
-                          </>
+                          <button
+                            onClick={() => cancelApproveMemory(post.id)}
+                            className="rounded-2xl bg-orange-500 px-6 py-4 font-bold text-white"
+                          >
+                            승인취소
+                          </button>
                         )}
+
+                        <button
+                          onClick={() => deleteMemory(post)}
+                          className="rounded-2xl bg-red-600 px-6 py-4 font-bold text-white"
+                        >
+                          삭제하기
+                        </button>
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === "notices" && (
+          <section>
+            <h2 className="mb-6 text-3xl font-black">공지사항 관리</h2>
+
+            <div className="mb-8 rounded-3xl bg-white p-6 shadow md:p-8">
+              <h3 className="mb-5 text-2xl font-black">
+                {editingNoticeId ? "공지사항 수정" : "새 공지사항 등록"}
+              </h3>
+
+              <div className="grid gap-4">
+                <input
+                  className="rounded-2xl border border-gray-300 p-4"
+                  placeholder="공지 제목"
+                  value={noticeTitle}
+                  onChange={(e) => setNoticeTitle(e.target.value)}
+                />
+
+                <input
+                  className="rounded-2xl border border-gray-300 p-4"
+                  placeholder="공지 날짜 예: 2026.05.26"
+                  value={noticeDate}
+                  onChange={(e) => setNoticeDate(e.target.value)}
+                />
+
+                <textarea
+                  className="min-h-40 rounded-2xl border border-gray-300 p-4"
+                  placeholder="공지 내용"
+                  value={noticeContent}
+                  onChange={(e) => setNoticeContent(e.target.value)}
+                />
+
+                <label className="flex items-center gap-3 font-bold text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={noticePublished}
+                    onChange={(e) => setNoticePublished(e.target.checked)}
+                  />
+                  공개 상태로 게시
+                </label>
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    onClick={saveNotice}
+                    className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
+                  >
+                    {editingNoticeId ? "공지 수정 저장" : "공지 등록"}
+                  </button>
+
+                  <button
+                    onClick={resetNoticeForm}
+                    className="rounded-2xl bg-gray-200 px-6 py-4 font-bold text-gray-700"
+                  >
+                    입력 초기화
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {notices.length === 0 ? (
+              <div className="rounded-3xl bg-white p-8 text-gray-500 shadow">
+                등록된 공지사항이 없습니다.
+              </div>
+            ) : (
+              <div className="grid gap-6">
+                {notices.map((notice) => (
+                  <div
+                    key={notice.id}
+                    className="rounded-3xl bg-white p-6 shadow md:p-8"
+                  >
+                    <span
+                      className={`mb-5 inline-flex rounded-full px-4 py-2 text-sm font-bold ${
+                        notice.published
+                          ? "bg-green-100 text-green-700"
+                          : "bg-gray-200 text-gray-600"
+                      }`}
+                    >
+                      {notice.published ? "공개" : "비공개"}
+                    </span>
+
+                    <p className="mb-2 text-sm text-gray-500">
+                      {notice.notice_date || "공지"}
+                    </p>
+
+                    <h3 className="mb-4 text-3xl font-bold">
+                      {notice.title}
+                    </h3>
+
+                    <p className="mb-8 whitespace-pre-line leading-relaxed text-gray-700">
+                      {notice.content}
+                    </p>
+
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                      <button
+                        onClick={() => startEditNotice(notice)}
+                        className="rounded-2xl bg-blue-600 px-6 py-4 font-bold text-white"
+                      >
+                        수정하기
+                      </button>
+
+                      <button
+                        onClick={() => toggleNoticePublished(notice)}
+                        className="rounded-2xl bg-orange-500 px-6 py-4 font-bold text-white"
+                      >
+                        {notice.published ? "비공개로 전환" : "공개로 전환"}
+                      </button>
+
+                      <button
+                        onClick={() => deleteNotice(notice)}
+                        className="rounded-2xl bg-red-600 px-6 py-4 font-bold text-white"
+                      >
+                        삭제하기
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </section>
