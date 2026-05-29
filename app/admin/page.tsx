@@ -54,6 +54,30 @@ export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loginError, setLoginError] = useState("");
 
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editEventTitle, setEditEventTitle] = useState("");
+  const [editEventDate, setEditEventDate] = useState("");
+  const [editEventLocation, setEditEventLocation] = useState("");
+  const [editEventAuthor, setEditEventAuthor] = useState("");
+  const [editEventDescription, setEditEventDescription] = useState("");
+  const [editEventUploadType, setEditEventUploadType] = useState<
+    "image" | "video"
+  >("image");
+  const [editEventVideoUrl, setEditEventVideoUrl] = useState("");
+  const [editEventImageFile, setEditEventImageFile] = useState<File | null>(
+    null
+  );
+
+  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
+  const [editMemoryTitle, setEditMemoryTitle] = useState("");
+  const [editMemoryDate, setEditMemoryDate] = useState("");
+  const [editMemoryLocation, setEditMemoryLocation] = useState("");
+  const [editMemoryPersonName, setEditMemoryPersonName] = useState("");
+  const [editMemoryDescription, setEditMemoryDescription] = useState("");
+  const [editMemoryImageFile, setEditMemoryImageFile] = useState<File | null>(
+    null
+  );
+
   const [noticeTitle, setNoticeTitle] = useState("");
   const [noticeDate, setNoticeDate] = useState("");
   const [noticeContent, setNoticeContent] = useState("");
@@ -210,6 +234,27 @@ export default function AdminPage() {
     return true;
   };
 
+  const uploadImageToStorage = async (file: File, bucket: string) => {
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(2)}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(bucket)
+      .upload(fileName, file);
+
+    if (uploadError) {
+      console.log(uploadError);
+      alert("이미지 업로드 실패");
+      return null;
+    }
+
+    const { data } = supabase.storage.from(bucket).getPublicUrl(fileName);
+
+    return data.publicUrl;
+  };
+
   const approveEvent = async (id: string) => {
     const { error } = await supabase
       .from("events")
@@ -239,6 +284,100 @@ export default function AdminPage() {
     }
 
     alert("승인 취소 완료");
+    fetchEvents();
+  };
+
+  const startEditEvent = (event: EventItem) => {
+    setEditingEventId(event.id);
+    setEditEventTitle(event.title || "");
+    setEditEventDate(event.event_date || "");
+    setEditEventLocation(event.location || "");
+    setEditEventAuthor(event.author || "");
+    setEditEventDescription(event.description || "");
+    setEditEventUploadType(event.upload_type === "video" ? "video" : "image");
+    setEditEventVideoUrl(event.video_url || "");
+    setEditEventImageFile(null);
+  };
+
+  const cancelEditEvent = () => {
+    setEditingEventId(null);
+    setEditEventTitle("");
+    setEditEventDate("");
+    setEditEventLocation("");
+    setEditEventAuthor("");
+    setEditEventDescription("");
+    setEditEventUploadType("image");
+    setEditEventVideoUrl("");
+    setEditEventImageFile(null);
+  };
+
+  const saveEditEvent = async (event: EventItem) => {
+    if (
+      !editEventTitle ||
+      !editEventDate ||
+      !editEventLocation ||
+      !editEventDescription
+    ) {
+      alert("행사명, 날짜, 장소, 소개 내용을 입력해주세요.");
+      return;
+    }
+
+    const updateData: Partial<EventItem> = {
+      title: editEventTitle,
+      event_date: editEventDate,
+      location: editEventLocation,
+      author: editEventAuthor,
+      description: editEventDescription,
+      upload_type: editEventUploadType,
+      video_url: editEventUploadType === "video" ? editEventVideoUrl : "",
+    };
+
+    if (editEventUploadType === "video") {
+      if (event.image_url) {
+        const imageDeleted = await deleteImageFromStorage(
+          event.image_url,
+          "event-images"
+        );
+
+        if (!imageDeleted) {
+          alert("기존 이미지 삭제 실패. 수정을 중단합니다.");
+          return;
+        }
+      }
+
+      updateData.image_url = "";
+    }
+
+    if (editEventUploadType === "image" && editEventImageFile) {
+      const newImageUrl = await uploadImageToStorage(
+        editEventImageFile,
+        "event-images"
+      );
+
+      if (!newImageUrl) {
+        return;
+      }
+
+      if (event.image_url) {
+        await deleteImageFromStorage(event.image_url, "event-images");
+      }
+
+      updateData.image_url = newImageUrl;
+    }
+
+    const { error } = await supabase
+      .from("events")
+      .update(updateData)
+      .eq("id", event.id);
+
+    if (error) {
+      console.log(error);
+      alert("행사 수정 실패");
+      return;
+    }
+
+    alert("행사 수정 완료");
+    cancelEditEvent();
     fetchEvents();
   };
 
@@ -304,6 +443,73 @@ export default function AdminPage() {
     }
 
     alert("승인 취소 완료");
+    fetchMemoryPosts();
+  };
+
+  const startEditMemory = (post: MemoryPost) => {
+    setEditingMemoryId(post.id);
+    setEditMemoryTitle(post.title || "");
+    setEditMemoryDate(post.memory_date || "");
+    setEditMemoryLocation(post.location || "");
+    setEditMemoryPersonName(post.person_name || "");
+    setEditMemoryDescription(post.description || "");
+    setEditMemoryImageFile(null);
+  };
+
+  const cancelEditMemory = () => {
+    setEditingMemoryId(null);
+    setEditMemoryTitle("");
+    setEditMemoryDate("");
+    setEditMemoryLocation("");
+    setEditMemoryPersonName("");
+    setEditMemoryDescription("");
+    setEditMemoryImageFile(null);
+  };
+
+  const saveEditMemory = async (post: MemoryPost) => {
+    if (!editMemoryTitle || !editMemoryDescription) {
+      alert("제목과 설명을 입력해주세요.");
+      return;
+    }
+
+    const updateData: Partial<MemoryPost> = {
+      title: editMemoryTitle,
+      memory_date: editMemoryDate,
+      location: editMemoryLocation,
+      person_name: editMemoryPersonName,
+      description: editMemoryDescription,
+    };
+
+    if (editMemoryImageFile) {
+      const newImageUrl = await uploadImageToStorage(
+        editMemoryImageFile,
+        "memory-images"
+      );
+
+      if (!newImageUrl) {
+        return;
+      }
+
+      if (post.image_url) {
+        await deleteImageFromStorage(post.image_url, "memory-images");
+      }
+
+      updateData.image_url = newImageUrl;
+    }
+
+    const { error } = await supabase
+      .from("memory_posts")
+      .update(updateData)
+      .eq("id", post.id);
+
+    if (error) {
+      console.log(error);
+      alert("진안의 시간 수정 실패");
+      return;
+    }
+
+    alert("진안의 시간 수정 완료");
+    cancelEditMemory();
     fetchMemoryPosts();
   };
 
@@ -617,89 +823,200 @@ export default function AdminPage() {
                     key={event.id}
                     className="overflow-hidden rounded-3xl bg-white shadow-lg"
                   >
-                    {event.upload_type === "video" && event.video_url ? (
-                      <div className="bg-gray-100 p-6">
-                        <p className="mb-3 text-sm font-bold text-gray-500">
-                          영상행사
-                        </p>
+                    {editingEventId === event.id ? (
+                      <div className="p-6 md:p-8">
+                        <h3 className="mb-5 text-2xl font-black">
+                          문화행사 수정
+                        </h3>
 
-                        <a
-                          href={event.video_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex rounded-2xl bg-red-600 px-6 py-3 font-bold text-white"
-                        >
-                          유튜브 영상 보기
-                        </a>
+                        <div className="grid gap-4">
+                          <select
+                            className="rounded-2xl border border-gray-300 bg-white p-4"
+                            value={editEventUploadType}
+                            onChange={(e) =>
+                              setEditEventUploadType(
+                                e.target.value as "image" | "video"
+                              )
+                            }
+                          >
+                            <option value="image">이미지 행사</option>
+                            <option value="video">영상 행사</option>
+                          </select>
+
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="행사명"
+                            value={editEventTitle}
+                            onChange={(e) => setEditEventTitle(e.target.value)}
+                          />
+
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="행사 날짜"
+                            value={editEventDate}
+                            onChange={(e) => setEditEventDate(e.target.value)}
+                          />
+
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="행사 장소"
+                            value={editEventLocation}
+                            onChange={(e) =>
+                              setEditEventLocation(e.target.value)
+                            }
+                          />
+
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="작성자"
+                            value={editEventAuthor}
+                            onChange={(e) =>
+                              setEditEventAuthor(e.target.value)
+                            }
+                          />
+
+                          <textarea
+                            className="min-h-40 rounded-2xl border border-gray-300 p-4"
+                            placeholder="행사 소개"
+                            value={editEventDescription}
+                            onChange={(e) =>
+                              setEditEventDescription(e.target.value)
+                            }
+                          />
+
+                          {editEventUploadType === "video" ? (
+                            <input
+                              className="rounded-2xl border border-gray-300 p-4"
+                              placeholder="유튜브 영상 주소"
+                              value={editEventVideoUrl}
+                              onChange={(e) =>
+                                setEditEventVideoUrl(e.target.value)
+                              }
+                            />
+                          ) : (
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="rounded-2xl border border-gray-300 bg-white p-4"
+                              onChange={(e) =>
+                                setEditEventImageFile(
+                                  e.target.files?.[0] || null
+                                )
+                              }
+                            />
+                          )}
+
+                          <div className="flex flex-col gap-3 sm:flex-row">
+                            <button
+                              onClick={() => saveEditEvent(event)}
+                              className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
+                            >
+                              수정 저장
+                            </button>
+
+                            <button
+                              onClick={cancelEditEvent}
+                              className="rounded-2xl bg-gray-200 px-6 py-4 font-bold text-gray-700"
+                            >
+                              취소
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     ) : (
-                      event.image_url && (
-                        <img
-                          src={event.image_url}
-                          alt={event.title}
-                          className="max-h-[680px] w-full bg-gray-100 object-contain"
-                        />
-                      )
-                    )}
+                      <>
+                        {event.upload_type === "video" && event.video_url ? (
+                          <div className="bg-gray-100 p-6">
+                            <p className="mb-3 text-sm font-bold text-gray-500">
+                              영상행사
+                            </p>
 
-                    <div className="p-6 md:p-8">
-                      <span
-                        className={`mb-5 inline-flex rounded-full px-4 py-2 text-sm font-bold ${
-                          event.approved
-                            ? "bg-green-100 text-green-700"
-                            : "bg-orange-100 text-orange-700"
-                        }`}
-                      >
-                        {event.approved ? "승인 완료" : "승인 대기"}
-                      </span>
-
-                      <p className="mb-2 text-sm text-gray-500">
-                        {event.event_date}
-                      </p>
-
-                      <h3 className="mb-4 text-3xl font-bold">
-                        {event.title}
-                      </h3>
-
-                      <p className="mb-3 font-semibold text-gray-600">
-                        장소: {event.location}
-                      </p>
-
-                      {event.author && (
-                        <p className="mb-5 text-sm text-gray-500">
-                          작성자: {event.author}
-                        </p>
-                      )}
-
-                      <p className="mb-8 whitespace-pre-line leading-relaxed text-gray-700">
-                        {event.description}
-                      </p>
-
-                      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                        {!event.approved ? (
-                          <button
-                            onClick={() => approveEvent(event.id)}
-                            className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
-                          >
-                            승인하기
-                          </button>
+                            <a
+                              href={event.video_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex rounded-2xl bg-red-600 px-6 py-3 font-bold text-white"
+                            >
+                              유튜브 영상 보기
+                            </a>
+                          </div>
                         ) : (
-                          <button
-                            onClick={() => cancelApproveEvent(event.id)}
-                            className="rounded-2xl bg-orange-500 px-6 py-4 font-bold text-white"
-                          >
-                            승인취소
-                          </button>
+                          event.image_url && (
+                            <img
+                              src={event.image_url}
+                              alt={event.title}
+                              className="max-h-[680px] w-full bg-gray-100 object-contain"
+                            />
+                          )
                         )}
 
-                        <button
-                          onClick={() => deleteEvent(event)}
-                          className="rounded-2xl bg-red-600 px-6 py-4 font-bold text-white"
-                        >
-                          삭제하기
-                        </button>
-                      </div>
-                    </div>
+                        <div className="p-6 md:p-8">
+                          <span
+                            className={`mb-5 inline-flex rounded-full px-4 py-2 text-sm font-bold ${
+                              event.approved
+                                ? "bg-green-100 text-green-700"
+                                : "bg-orange-100 text-orange-700"
+                            }`}
+                          >
+                            {event.approved ? "승인 완료" : "승인 대기"}
+                          </span>
+
+                          <p className="mb-2 text-sm text-gray-500">
+                            {event.event_date}
+                          </p>
+
+                          <h3 className="mb-4 text-3xl font-bold">
+                            {event.title}
+                          </h3>
+
+                          <p className="mb-3 font-semibold text-gray-600">
+                            장소: {event.location}
+                          </p>
+
+                          {event.author && (
+                            <p className="mb-5 text-sm text-gray-500">
+                              작성자: {event.author}
+                            </p>
+                          )}
+
+                          <p className="mb-8 whitespace-pre-line leading-relaxed text-gray-700">
+                            {event.description}
+                          </p>
+
+                          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                            {!event.approved ? (
+                              <button
+                                onClick={() => approveEvent(event.id)}
+                                className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
+                              >
+                                승인하기
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => cancelApproveEvent(event.id)}
+                                className="rounded-2xl bg-orange-500 px-6 py-4 font-bold text-white"
+                              >
+                                승인취소
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => startEditEvent(event)}
+                              className="rounded-2xl bg-blue-600 px-6 py-4 font-bold text-white"
+                            >
+                              수정하기
+                            </button>
+
+                            <button
+                              onClick={() => deleteEvent(event)}
+                              className="rounded-2xl bg-red-600 px-6 py-4 font-bold text-white"
+                            >
+                              삭제하기
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -722,74 +1039,163 @@ export default function AdminPage() {
                     key={post.id}
                     className="overflow-hidden rounded-3xl bg-white shadow-lg"
                   >
-                    {post.image_url && (
-                      <img
-                        src={post.image_url}
-                        alt={post.title}
-                        className="max-h-[680px] w-full bg-gray-100 object-contain"
-                      />
-                    )}
+                    {editingMemoryId === post.id ? (
+                      <div className="p-6 md:p-8">
+                        <h3 className="mb-5 text-2xl font-black">
+                          진안의 시간 수정
+                        </h3>
 
-                    <div className="p-6 md:p-8">
-                      <span
-                        className={`mb-5 inline-flex rounded-full px-4 py-2 text-sm font-bold ${
-                          post.approved
-                            ? "bg-green-100 text-green-700"
-                            : "bg-orange-100 text-orange-700"
-                        }`}
-                      >
-                        {post.approved ? "승인 완료" : "승인 대기"}
-                      </span>
+                        <div className="grid gap-4">
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="제목"
+                            value={editMemoryTitle}
+                            onChange={(e) =>
+                              setEditMemoryTitle(e.target.value)
+                            }
+                          />
 
-                      <p className="mb-2 text-sm text-gray-500">
-                        {post.memory_date || "시기 미상"}
-                      </p>
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="시기 예: 1970년대"
+                            value={editMemoryDate}
+                            onChange={(e) => setEditMemoryDate(e.target.value)}
+                          />
 
-                      <h3 className="mb-4 text-3xl font-bold">
-                        {post.title}
-                      </h3>
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="장소"
+                            value={editMemoryLocation}
+                            onChange={(e) =>
+                              setEditMemoryLocation(e.target.value)
+                            }
+                          />
 
-                      {post.location && (
-                        <p className="mb-3 font-semibold text-gray-600">
-                          장소: {post.location}
-                        </p>
-                      )}
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="제공자"
+                            value={editMemoryPersonName}
+                            onChange={(e) =>
+                              setEditMemoryPersonName(e.target.value)
+                            }
+                          />
 
-                      {post.person_name && (
-                        <p className="mb-5 text-sm text-gray-500">
-                          제공: {post.person_name}
-                        </p>
-                      )}
+                          <textarea
+                            className="min-h-40 rounded-2xl border border-gray-300 p-4"
+                            placeholder="설명"
+                            value={editMemoryDescription}
+                            onChange={(e) =>
+                              setEditMemoryDescription(e.target.value)
+                            }
+                          />
 
-                      <p className="mb-8 whitespace-pre-line leading-relaxed text-gray-700">
-                        {post.description}
-                      </p>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="rounded-2xl border border-gray-300 bg-white p-4"
+                            onChange={(e) =>
+                              setEditMemoryImageFile(
+                                e.target.files?.[0] || null
+                              )
+                            }
+                          />
 
-                      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                        {!post.approved ? (
-                          <button
-                            onClick={() => approveMemory(post.id)}
-                            className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
-                          >
-                            승인하기
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => cancelApproveMemory(post.id)}
-                            className="rounded-2xl bg-orange-500 px-6 py-4 font-bold text-white"
-                          >
-                            승인취소
-                          </button>
+                          <div className="flex flex-col gap-3 sm:flex-row">
+                            <button
+                              onClick={() => saveEditMemory(post)}
+                              className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
+                            >
+                              수정 저장
+                            </button>
+
+                            <button
+                              onClick={cancelEditMemory}
+                              className="rounded-2xl bg-gray-200 px-6 py-4 font-bold text-gray-700"
+                            >
+                              취소
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {post.image_url && (
+                          <img
+                            src={post.image_url}
+                            alt={post.title}
+                            className="max-h-[680px] w-full bg-gray-100 object-contain"
+                          />
                         )}
 
-                        <button
-                          onClick={() => deleteMemory(post)}
-                          className="rounded-2xl bg-red-600 px-6 py-4 font-bold text-white"
-                        >
-                          삭제하기
-                        </button>
-                      </div>
-                    </div>
+                        <div className="p-6 md:p-8">
+                          <span
+                            className={`mb-5 inline-flex rounded-full px-4 py-2 text-sm font-bold ${
+                              post.approved
+                                ? "bg-green-100 text-green-700"
+                                : "bg-orange-100 text-orange-700"
+                            }`}
+                          >
+                            {post.approved ? "승인 완료" : "승인 대기"}
+                          </span>
+
+                          <p className="mb-2 text-sm text-gray-500">
+                            {post.memory_date || "시기 미상"}
+                          </p>
+
+                          <h3 className="mb-4 text-3xl font-bold">
+                            {post.title}
+                          </h3>
+
+                          {post.location && (
+                            <p className="mb-3 font-semibold text-gray-600">
+                              장소: {post.location}
+                            </p>
+                          )}
+
+                          {post.person_name && (
+                            <p className="mb-5 text-sm text-gray-500">
+                              제공: {post.person_name}
+                            </p>
+                          )}
+
+                          <p className="mb-8 whitespace-pre-line leading-relaxed text-gray-700">
+                            {post.description}
+                          </p>
+
+                          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                            {!post.approved ? (
+                              <button
+                                onClick={() => approveMemory(post.id)}
+                                className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
+                              >
+                                승인하기
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => cancelApproveMemory(post.id)}
+                                className="rounded-2xl bg-orange-500 px-6 py-4 font-bold text-white"
+                              >
+                                승인취소
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => startEditMemory(post)}
+                              className="rounded-2xl bg-blue-600 px-6 py-4 font-bold text-white"
+                            >
+                              수정하기
+                            </button>
+
+                            <button
+                              onClick={() => deleteMemory(post)}
+                              className="rounded-2xl bg-red-600 px-6 py-4 font-bold text-white"
+                            >
+                              삭제하기
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
