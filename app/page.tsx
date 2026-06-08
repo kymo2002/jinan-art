@@ -28,6 +28,11 @@ type NoticeItem = {
   created_at?: string;
 };
 
+type ViewStats = {
+  total_count: number;
+  today_count: number;
+};
+
 export default function Home() {
   const [title, setTitle] = useState("");
   const [eventStartDate, setEventStartDate] = useState("");
@@ -42,6 +47,11 @@ export default function Home() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [notices, setNotices] = useState<NoticeItem[]>([]);
   const [searchText, setSearchText] = useState("");
+
+  const [viewStats, setViewStats] = useState<ViewStats>({
+    total_count: 0,
+    today_count: 0,
+  });
 
   const fetchEvents = async () => {
     const { data, error } = await supabase
@@ -74,9 +84,32 @@ export default function Home() {
     setNotices(data || []);
   };
 
+  const recordVisit = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+
+    const { data, error } = await supabase.rpc("increment_site_view", {
+      p_today: today,
+    });
+
+    if (error) {
+      console.log(error);
+      return;
+    }
+
+    const firstRow = Array.isArray(data) ? data[0] : data;
+
+    if (firstRow) {
+      setViewStats({
+        total_count: Number(firstRow.total_count || 0),
+        today_count: Number(firstRow.today_count || 0),
+      });
+    }
+  };
+
   useEffect(() => {
     fetchEvents();
     fetchNotices();
+    recordVisit();
   }, []);
 
   const filteredEvents = events.filter((event) => {
@@ -735,6 +768,11 @@ export default function Home() {
         <p className="mb-6 text-sm text-gray-500">
           문화가 머무는 진안고원 · 군민참여 문화예술 기록 플랫폼
         </p>
+
+        <div className="mb-6 flex flex-col items-center justify-center gap-2 text-sm font-semibold text-gray-500 sm:flex-row sm:gap-6">
+          <span>총 조회 수: {viewStats.total_count.toLocaleString()}</span>
+          <span>오늘 조회 수: {viewStats.today_count.toLocaleString()}</span>
+        </div>
 
         <div className="flex flex-col items-center gap-3 text-xs font-semibold text-gray-400 sm:flex-row sm:justify-center">
           <Link
