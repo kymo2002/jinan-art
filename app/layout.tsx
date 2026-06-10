@@ -47,7 +47,7 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "진안문화아트 | 진안문화 · 진안예술 · 진안행사 플랫폼",
+    title: "진안문화 | 진안문화아트진안예술 · 진안행사 플랫폼",
     description:
       "진안문화, 진안예술, 진안행사, 공연, 전시, 축제, 체험, 옛사진을 함께 기록하는 군민참여 문화예술 기록 플랫폼입니다.",
   },
