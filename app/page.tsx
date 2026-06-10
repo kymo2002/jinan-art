@@ -245,6 +245,25 @@ export default function Home() {
     resetForm();
   };
 
+  const handleShare = async (event: EventItem) => {
+    const shareUrl = `${window.location.origin}/events/${event.id}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: event.title,
+          text: event.description,
+          url: shareUrl,
+        });
+      } catch {
+        return;
+      }
+    } else {
+      await navigator.clipboard.writeText(shareUrl);
+      alert("행사 주소가 복사되었습니다.");
+    }
+  };
+
   return (
     <main className="min-h-screen bg-gray-100 text-black">
       {/* HERO */}
@@ -297,8 +316,8 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="px-4 py-16 md:px-6 md:py-20">
-        <div className="mx-auto max-w-6xl rounded-3xl bg-white p-5 shadow-xl md:p-12">
+      <section className="px-3 py-16 md:px-6 md:py-20">
+        <div className="mx-auto max-w-7xl rounded-3xl bg-white p-4 shadow-xl md:p-10">
           <div className="mb-16 text-center">
             <p className="mb-4 text-xs tracking-[0.4em] text-gray-500">
               JINAN CULTURE PLATFORM
@@ -374,7 +393,7 @@ export default function Home() {
                 </p>
 
                 <h2 className="text-3xl font-black md:text-4xl">
-                  등록된 행사
+                  오늘의 문화
                 </h2>
               </div>
 
@@ -421,68 +440,82 @@ export default function Home() {
                 검색 결과가 없습니다.
               </div>
             ) : (
-              <div className="grid gap-8 md:grid-cols-2">
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6">
                 {filteredEvents.map((event) => (
                   <div
                     key={event.id}
-                    className="overflow-hidden rounded-3xl bg-white shadow-lg"
+                    className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-md"
                   >
                     {event.upload_type === "video" && event.video_url ? (
-                      <div className="bg-gray-100 p-6">
-                        <p className="mb-3 text-sm font-bold text-gray-500">
-                          영상행사
-                        </p>
+                      <div className="relative flex h-52 w-full items-center justify-center bg-gray-100 p-3 md:h-64 lg:h-72">
+                        <span className="absolute left-3 top-3 rounded-full bg-black/75 px-3 py-1.5 text-xs font-bold text-white">
+                          영상
+                        </span>
 
                         <a
                           href={event.video_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex rounded-2xl bg-red-600 px-6 py-3 font-bold text-white transition hover:bg-red-700"
+                          className="rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-red-700"
                         >
-                          유튜브 영상 보기
+                          영상 보기
                         </a>
                       </div>
                     ) : (
                       event.image_url && (
-                        <div className="flex w-full items-center justify-center bg-gray-100 p-3">
+                        <div className="relative h-52 w-full bg-gray-100 md:h-64 lg:h-72">
                           <img
                             src={event.image_url}
                             alt={event.title}
-                            className="max-h-[680px] w-full object-contain"
+                            className="h-full w-full object-cover"
                           />
+
+                          <span className="absolute left-3 top-3 rounded-full bg-black/75 px-3 py-1.5 text-xs font-bold text-white">
+                            이미지
+                          </span>
                         </div>
                       )
                     )}
 
-                    <div className="p-6 md:p-8">
-                      <p className="mb-3 text-sm text-gray-500">
+                    <div className="p-3 md:p-4">
+                      <p className="mb-2 text-xs leading-relaxed text-gray-500 md:text-sm">
                         {event.event_date}
                       </p>
 
-                      <h3 className="mb-5 text-2xl font-black leading-tight">
+                      <h3 className="mb-3 line-clamp-2 text-base font-black leading-tight md:text-lg">
                         {event.title}
                       </h3>
 
-                      <p className="mb-3 font-semibold text-gray-600">
-                        장소: {event.location}
+                      <p className="mb-3 line-clamp-1 text-sm font-semibold text-gray-600 md:text-base">
+                        {event.location}
                       </p>
 
                       {event.author && (
-                        <p className="mb-5 text-sm text-gray-500">
-                          작성자: {event.author}
+                        <p className="mb-3 line-clamp-1 text-xs text-gray-500 md:text-sm">
+                          {event.author}
                         </p>
                       )}
 
-                      <p className="mb-6 line-clamp-4 whitespace-pre-line leading-relaxed text-gray-700">
+                      <p className="mb-4 hidden line-clamp-3 whitespace-pre-line text-sm leading-relaxed text-gray-700 lg:block">
                         {event.description}
                       </p>
 
-                      <Link
-                        href={`/events/${event.id}`}
-                        className="inline-flex rounded-2xl bg-black px-6 py-3 font-bold text-white transition hover:bg-gray-800"
-                      >
-                        자세히 보기
-                      </Link>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <Link
+                          href={`/events/${event.id}`}
+                          className="rounded-xl bg-gray-500 px-3 py-2.5 text-center text-sm font-bold text-white transition hover:bg-gray-600"
+                        >
+                          자세히
+                        </Link>
+
+                        <button
+                          type="button"
+                          onClick={() => handleShare(event)}
+                          className="rounded-xl bg-purple-600 px-3 py-2.5 text-center text-sm font-bold text-white transition hover:bg-purple-700"
+                        >
+                          공유
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
