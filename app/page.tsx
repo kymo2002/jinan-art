@@ -330,7 +330,7 @@ export default function Home() {
             </h2>
 
             <p className="text-base leading-relaxed text-gray-600 md:text-lg">
-              진안문화를  함께 기록하는 문화예술 기록 플랫폼
+              진안문화를  함께 담문화예술 기록 플랫폼
             </p>
           </div>
 
