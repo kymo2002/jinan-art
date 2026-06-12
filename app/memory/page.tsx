@@ -318,7 +318,7 @@ export default function MemoryPage() {
                 검색 결과가 없습니다.
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6">
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 md:gap-6">
                 {filteredPosts.map((post) => (
                   <article
                     key={post.id}
