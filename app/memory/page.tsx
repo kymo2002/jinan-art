@@ -200,8 +200,8 @@ export default function MemoryPage() {
         </div>
       </section>
 
-      <section className="px-4 py-16 md:px-6 md:py-20">
-        <div className="mx-auto max-w-6xl rounded-3xl bg-white p-5 shadow-xl md:p-12">
+      <section className="px-3 py-16 md:px-6 md:py-20">
+        <div className="mx-auto max-w-7xl rounded-3xl bg-white p-4 shadow-xl md:p-10">
           <div className="mb-14 text-center">
             <p className="mb-4 text-xs tracking-[0.4em] text-gray-500">
               MEMORY OF JINAN
@@ -318,14 +318,14 @@ export default function MemoryPage() {
                 검색 결과가 없습니다.
               </div>
             ) : (
-              <div className="grid gap-8 md:grid-cols-2">
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6">
                 {filteredPosts.map((post) => (
                   <article
                     key={post.id}
-                    className="overflow-hidden rounded-3xl bg-white shadow-lg"
+                    className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-md"
                   >
                     {post.image_url && (
-                      <div className="bg-gray-100 p-3">
+                      <div className="bg-gray-100 p-2">
                         <button
                           type="button"
                           onClick={() =>
@@ -336,7 +336,7 @@ export default function MemoryPage() {
                           <img
                             src={post.image_url}
                             alt={post.title}
-                            className="max-h-[720px] w-full object-contain transition duration-300 group-hover:scale-[1.01]"
+                            className="h-48 w-full object-cover transition duration-300 group-hover:scale-[1.01] md:h-64 lg:h-72"
                           />
                         </button>
 
@@ -345,35 +345,35 @@ export default function MemoryPage() {
                           onClick={() =>
                             openImageModal(post.image_url || "", post.title)
                           }
-                          className="mt-3 w-full rounded-2xl bg-black px-5 py-3 font-bold text-white transition hover:bg-gray-800"
+                          className="mt-2 w-full rounded-xl bg-black px-3 py-2.5 text-sm font-bold text-white transition hover:bg-gray-800"
                         >
-                          사진 크게 보기
+                          크게 보기
                         </button>
                       </div>
                     )}
 
-                    <div className="p-6 md:p-8">
-                      <p className="mb-3 text-sm text-gray-500">
+                    <div className="p-3 md:p-4">
+                      <p className="mb-2 text-xs text-gray-500 md:text-sm">
                         {post.memory_date || "시기 미상"}
                       </p>
 
-                      <h3 className="mb-5 text-2xl font-black leading-tight">
+                      <h3 className="mb-3 line-clamp-2 text-base font-black leading-tight md:text-lg">
                         {post.title}
                       </h3>
 
                       {post.location && (
-                        <p className="mb-3 font-semibold text-gray-600">
+                        <p className="mb-2 line-clamp-1 text-sm font-semibold text-gray-600 md:text-base">
                           장소: {post.location}
                         </p>
                       )}
 
                       {post.person_name && (
-                        <p className="mb-5 text-sm text-gray-500">
+                        <p className="mb-3 line-clamp-1 text-xs text-gray-500 md:text-sm">
                           제공: {post.person_name}
                         </p>
                       )}
 
-                      <p className="whitespace-pre-line leading-relaxed text-gray-700">
+                      <p className="hidden whitespace-pre-line text-sm leading-relaxed text-gray-700 lg:line-clamp-4 lg:block">
                         {post.description}
                       </p>
                     </div>
