@@ -53,19 +53,53 @@ export default function Home() {
     today_count: 0,
   });
 
+  const getTodayDateString = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  };
+
   const fetchEvents = async () => {
     const { data, error } = await supabase
       .from("events")
       .select("*")
-      .eq("approved", true)
-      .order("event_date", { ascending: true });
+      .eq("approved", true);
 
     if (error) {
       console.log(error);
       return;
     }
 
-    setEvents(data || []);
+    const today = getTodayDateString();
+
+    const sortedEvents = (data || []).sort((a, b) => {
+      const aStart = a.start_date || a.event_date || "";
+      const bStart = b.start_date || b.event_date || "";
+
+      const aEnd = a.end_date || aStart;
+      const bEnd = b.end_date || bStart;
+
+      const aIsPast = aEnd < today;
+      const bIsPast = bEnd < today;
+
+      // 지난 행사는 뒤로 보냄
+      if (aIsPast !== bIsPast) {
+        return aIsPast ? 1 : -1;
+      }
+
+      // 둘 다 예정 행사이면 가까운 날짜가 먼저
+      if (!aIsPast && !bIsPast) {
+        return aStart.localeCompare(bStart);
+      }
+
+      // 둘 다 지난 행사이면 최근 지난 행사가 먼저
+      return bStart.localeCompare(aStart);
+    });
+
+    setEvents(sortedEvents);
   };
 
   const fetchNotices = async () => {
@@ -85,7 +119,7 @@ export default function Home() {
   };
 
   const recordVisit = async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayDateString();
 
     const { data, error } = await supabase.rpc("increment_site_view", {
       p_today: today,
@@ -330,61 +364,61 @@ export default function Home() {
             </h2>
 
             <p className="text-base leading-relaxed text-gray-600 md:text-lg">
-              진안문화를  함께 담문화예술 기록 플랫폼
+              진안문화를 함께 담는 군민참여 플랫폼
             </p>
           </div>
 
           {/* 카드 섹션 */}
-<div id="memory" className="mb-16 grid gap-6 md:grid-cols-2">
-  {/* 오늘의 문화: PC에서만 보이고 모바일에서는 숨김 */}
-  <div className="hidden overflow-hidden rounded-3xl bg-gray-50 shadow md:block">
-    <img
-      src="/images/flower-maisan.jpg"
-      alt="오늘의 문화"
-      className="h-64 w-full object-cover md:h-80"
-    />
+          <div id="memory" className="mb-16 grid gap-6 md:grid-cols-2">
+            {/* 오늘의 문화: PC에서만 보이고 모바일에서는 숨김 */}
+            <div className="hidden overflow-hidden rounded-3xl bg-gray-50 shadow md:block">
+              <img
+                src="/images/flower-maisan.jpg"
+                alt="오늘의 문화"
+                className="h-64 w-full object-cover md:h-80"
+              />
 
-    <div className="p-5">
-      <p className="mb-2 text-xs tracking-[0.25em] text-gray-400">
-        CULTURE
-      </p>
+              <div className="p-5">
+                <p className="mb-2 text-xs tracking-[0.25em] text-gray-400">
+                  CULTURE
+                </p>
 
-      <h3 className="mb-2 text-2xl font-bold">오늘의 문화</h3>
+                <h3 className="mb-2 text-2xl font-bold">오늘의 문화</h3>
 
-      <p className="text-gray-600">
-        누구나 진안의 문화예술 소식을 전합니다.
-      </p>
-    </div>
-  </div>
+                <p className="text-gray-600">
+                  누구나 진안의 문화예술 소식을 전합니다.
+                </p>
+              </div>
+            </div>
 
-  {/* 진안의 시간: 모바일과 PC 모두 보임 */}
-  <div className="overflow-hidden rounded-3xl bg-gray-50 shadow">
-    <img
-      src="/images/old-jinan.jpg"
-      alt="진안의 시간"
-      className="h-64 w-full object-cover md:h-80"
-    />
+            {/* 진안의 시간: 모바일과 PC 모두 보임 */}
+            <div className="overflow-hidden rounded-3xl bg-gray-50 shadow">
+              <img
+                src="/images/old-jinan.jpg"
+                alt="진안의 시간"
+                className="h-64 w-full object-cover md:h-80"
+              />
 
-    <div className="p-5">
-      <p className="mb-2 text-xs tracking-[0.25em] text-gray-400">
-        MEMORY
-      </p>
+              <div className="p-5">
+                <p className="mb-2 text-xs tracking-[0.25em] text-gray-400">
+                  MEMORY
+                </p>
 
-      <h3 className="mb-2 text-2xl font-bold">진안의 시간</h3>
+                <h3 className="mb-2 text-2xl font-bold">진안의 시간</h3>
 
-      <p className="mb-5 text-gray-600">
-        오래된 풍경과 기억을 함께 기록합니다.
-      </p>
+                <p className="mb-5 text-gray-600">
+                  오래된 풍경과 기억을 함께 기록합니다.
+                </p>
 
-      <Link
-        href="/memory"
-        className="inline-flex rounded-2xl bg-black px-5 py-3 font-bold text-white transition hover:bg-gray-800"
-      >
-        진안의 시간 보기
-      </Link>
-    </div>
-  </div>
-</div>
+                <Link
+                  href="/memory"
+                  className="inline-flex rounded-2xl bg-black px-5 py-3 font-bold text-white transition hover:bg-gray-800"
+                >
+                  진안의 시간 보기
+                </Link>
+              </div>
+            </div>
+          </div>
 
           {/* 행사 목록 */}
           <div id="events" className="mb-16 scroll-mt-10">
@@ -395,7 +429,7 @@ export default function Home() {
                 </p>
 
                 <h2 className="text-3xl font-black md:text-4xl">
-                  오늘의 문화
+                  등록된 행사
                 </h2>
               </div>
 
