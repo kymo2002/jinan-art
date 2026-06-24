@@ -301,21 +301,30 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-100 text-black">
       {/* HERO */}
-      <section className="relative flex min-h-[720px] items-center justify-center overflow-hidden bg-white px-6 text-white md:min-h-screen">
+      <section className="relative flex h-[100svh] min-h-[100svh] items-center justify-center overflow-hidden bg-black px-4 text-white md:min-h-screen md:px-6">
+        {/* 모바일: 원본 사진 한 장만 화면 전체에 표시 */}
+        <img
+          src="/images/main-hero.jpg"
+          alt="문화가 머무는 진안고원"
+          className="absolute inset-0 h-full w-full object-cover object-center md:hidden"
+        />
+
+        {/* PC: 기존 흐린 배경 유지 */}
         <div
           className="absolute inset-0 hidden scale-110 bg-cover bg-center opacity-60 blur-md md:block"
           style={{ backgroundImage: "url('/images/main-hero.jpg')" }}
         />
 
+        {/* PC: 원본 사진 전체 표시 */}
         <div
-          className="absolute inset-0 bg-contain bg-center bg-no-repeat md:bg-contain"
+          className="absolute inset-0 hidden bg-contain bg-center bg-no-repeat md:block"
           style={{ backgroundImage: "url('/images/main-hero.jpg')" }}
         />
 
-        <div className="absolute inset-0 bg-white/10" />
+        <div className="absolute inset-0 bg-black/15 md:bg-white/10" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/10 to-black/20" />
 
-        <div className="relative z-10 text-center drop-shadow-[0_3px_8px_rgba(0,0,0,0.45)]">
+        <div className="relative z-10 text-center drop-shadow-[0_3px_8px_rgba(0,0,0,0.55)]">
           <p className="mb-5 text-xs tracking-[0.45em] text-white/95">
             JINAN CULTURE ART
           </p>
@@ -332,17 +341,17 @@ export default function Home() {
             진안 문화이야기
           </p>
 
-          <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
+          <div className="mt-10 flex justify-center gap-3 sm:gap-4">
             <a
               href="#events"
-              className="rounded-full bg-white px-6 py-3 font-bold text-black shadow-lg transition hover:bg-gray-100"
+              className="rounded-full bg-white px-5 py-3 text-sm font-bold text-black shadow-lg transition hover:bg-gray-100 sm:px-6 sm:text-base"
             >
               문화행사 보기
             </a>
 
             <a
               href="#upload"
-              className="rounded-full border border-white bg-white/20 px-6 py-3 font-bold text-white shadow-lg backdrop-blur-sm transition hover:bg-white/30"
+              className="rounded-full border border-white bg-white/20 px-5 py-3 text-sm font-bold text-white shadow-lg backdrop-blur-sm transition hover:bg-white/30 sm:px-6 sm:text-base"
             >
               소식 올리기
             </a>
