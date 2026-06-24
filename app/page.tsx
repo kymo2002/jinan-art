@@ -303,7 +303,7 @@ export default function Home() {
       {/* HERO */}
       <section className="relative flex min-h-[720px] items-center justify-center overflow-hidden bg-white px-6 text-white md:min-h-screen">
         <div
-          className="absolute inset-0 scale-110 bg-cover bg-center opacity-60 blur-md md:block"
+          className="absolute inset-0 hidden scale-110 bg-cover bg-center opacity-60 blur-md md:block"
           style={{ backgroundImage: "url('/images/main-hero.jpg')" }}
         />
 
