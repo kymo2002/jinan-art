@@ -373,9 +373,15 @@ export default function MemoryPage() {
                         </p>
                       )}
 
-                      <p className="hidden whitespace-pre-line text-sm leading-relaxed text-gray-700 lg:line-clamp-4 lg:block">
-                        {post.description}
-                      </p>
+                      <div className="mt-3">
+                        <p className="mb-1 text-xs font-bold text-gray-500 md:text-sm">
+                          사진에 담긴 이야기
+                        </p>
+
+                        <p className="line-clamp-4 whitespace-pre-line text-xs leading-relaxed text-gray-700 md:text-sm">
+                          {post.description}
+                        </p>
+                      </div>
                     </div>
                   </article>
                 ))}
