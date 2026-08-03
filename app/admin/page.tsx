@@ -7,54 +7,260 @@ type EventItem = {
   id: string;
   title: string;
   event_date: string;
+  start_date?: string;
+  end_date?: string;
   location: string;
+  author?: string;
   description: string;
   approved: boolean;
   image_url?: string;
-  is_featured: boolean;
-  display_order: number | null;
+  upload_type?: string;
+  video_url?: string;
+  is_featured?: boolean;
+  display_order?: number | null;
+  created_at?: string;
+  views?: number;
+};
+
+type MemoryPost = {
+  id: string;
+  title: string;
+  memory_date?: string;
+  location?: string;
+  description: string;
+  person_name?: string;
+  approved: boolean;
+  image_url?: string;
+  created_at?: string;
+};
+
+type NoticeItem = {
+  id: string;
+  title: string;
+  content: string;
+  notice_date?: string;
+  published: boolean;
   created_at?: string;
 };
 
 export default function AdminPage() {
-  const [pendingEvents, setPendingEvents] = useState<EventItem[]>([]);
-  const [approvedEvents, setApprovedEvents] = useState<EventItem[]>([]);
+  const [activeTab, setActiveTab] = useState<"events" | "memory" | "notices">(
+    "events"
+  );
+
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [memoryPosts, setMemoryPosts] = useState<MemoryPost[]>([]);
+  const [notices, setNotices] = useState<NoticeItem[]>([]);
+
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [currentAdminEmail, setCurrentAdminEmail] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loginError, setLoginError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  const fetchEvents = async () => {
-    const [pendingResult, approvedResult] = await Promise.all([
-      supabase
-        .from("events")
-        .select("*")
-        .eq("approved", false)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("events")
-        .select("*")
-        .eq("approved", true)
-        .order("is_featured", { ascending: false })
-        .order("display_order", { ascending: true, nullsFirst: false })
-        .order("created_at", { ascending: false }),
-    ]);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editEventTitle, setEditEventTitle] = useState("");
+  const [editEventDate, setEditEventDate] = useState("");
+  const [editEventLocation, setEditEventLocation] = useState("");
+  const [editEventAuthor, setEditEventAuthor] = useState("");
+  const [editEventDescription, setEditEventDescription] = useState("");
+  const [editEventUploadType, setEditEventUploadType] = useState<
+    "image" | "video"
+  >("image");
+  const [editEventVideoUrl, setEditEventVideoUrl] = useState("");
+  const [editEventImageFile, setEditEventImageFile] = useState<File | null>(
+    null
+  );
 
-    if (pendingResult.error) {
-      console.log(pendingResult.error);
-      alert("승인 대기 목록을 불러오지 못했습니다.");
-    } else {
-      setPendingEvents(pendingResult.data || []);
-    }
+  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
+  const [editMemoryTitle, setEditMemoryTitle] = useState("");
+  const [editMemoryDate, setEditMemoryDate] = useState("");
+  const [editMemoryLocation, setEditMemoryLocation] = useState("");
+  const [editMemoryPersonName, setEditMemoryPersonName] = useState("");
+  const [editMemoryDescription, setEditMemoryDescription] = useState("");
+  const [editMemoryImageFile, setEditMemoryImageFile] = useState<File | null>(
+    null
+  );
 
-    if (approvedResult.error) {
-      console.log(approvedResult.error);
-      alert("승인된 문화소식 목록을 불러오지 못했습니다.");
-    } else {
-      setApprovedEvents(approvedResult.data || []);
+  const [noticeTitle, setNoticeTitle] = useState("");
+  const [noticeDate, setNoticeDate] = useState("");
+  const [noticeContent, setNoticeContent] = useState("");
+  const [noticePublished, setNoticePublished] = useState(true);
+  const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
+
+  useEffect(() => {
+    checkExistingSession();
+  }, []);
+
+  const checkExistingSession = async () => {
+    const { data } = await supabase.auth.getSession();
+
+    if (data.session?.user?.email) {
+      await checkAdminAccess(data.session.user.email);
     }
   };
 
-  useEffect(() => {
-    fetchEvents();
-  }, []);
+  const checkAdminAccess = async (email: string) => {
+    const { data, error } = await supabase.rpc("is_admin");
+
+    if (error) {
+      console.log(error);
+      setIsAdmin(false);
+      setLoginError("관리자 권한 확인 중 오류가 발생했습니다.");
+      return;
+    }
+
+    if (data === true) {
+      setIsAdmin(true);
+      setCurrentAdminEmail(email);
+      setLoginError("");
+      fetchAllData();
+      return;
+    }
+
+    await supabase.auth.signOut();
+    setIsAdmin(false);
+    setCurrentAdminEmail("");
+    setLoginError("관리자 권한이 없는 계정입니다.");
+  };
+
+  const handleLogin = async () => {
+    if (!adminEmail || !adminPassword) {
+      setLoginError("이메일과 비밀번호를 입력해주세요.");
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: adminEmail,
+      password: adminPassword,
+    });
+
+    if (error) {
+      console.log(error);
+      setLoginError("로그인 실패. 이메일 또는 비밀번호를 확인해주세요.");
+      return;
+    }
+
+    if (data.user.email) {
+      await checkAdminAccess(data.user.email);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAdmin(false);
+    setCurrentAdminEmail("");
+    setAdminEmail("");
+    setAdminPassword("");
+  };
+
+  const fetchAllData = async () => {
+    await Promise.all([fetchEvents(), fetchMemoryPosts(), fetchNotices()]);
+  };
+
+  const fetchEvents = async () => {
+    const { data, error } = await supabase
+      .from("events")
+      .select("*")
+      .order("approved", { ascending: true })
+      .order("is_featured", { ascending: false })
+      .order("display_order", { ascending: true, nullsFirst: false })
+      .order("event_date", { ascending: true });
+
+    if (error) {
+      console.log(error);
+      alert("행사 목록을 불러오지 못했습니다.");
+      return;
+    }
+
+    setEvents(data || []);
+  };
+
+  const fetchMemoryPosts = async () => {
+    const { data, error } = await supabase
+      .from("memory_posts")
+      .select("*")
+      .order("approved", { ascending: true })
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.log(error);
+      return;
+    }
+
+    setMemoryPosts(data || []);
+  };
+
+  const fetchNotices = async () => {
+    const { data, error } = await supabase
+      .from("notices")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.log(error);
+      return;
+    }
+
+    setNotices(data || []);
+  };
+
+  const getImagePathFromUrl = (imageUrl: string | undefined, bucket: string) => {
+    if (!imageUrl) {
+      return null;
+    }
+
+    const marker = `/${bucket}/`;
+    const markerIndex = imageUrl.indexOf(marker);
+
+    if (markerIndex === -1) {
+      return null;
+    }
+
+    return decodeURIComponent(imageUrl.substring(markerIndex + marker.length));
+  };
+
+  const deleteImageFromStorage = async (
+    imageUrl: string | undefined,
+    bucket: string
+  ) => {
+    const imagePath = getImagePathFromUrl(imageUrl, bucket);
+
+    if (!imagePath) {
+      return true;
+    }
+
+    const { error } = await supabase.storage.from(bucket).remove([imagePath]);
+
+    if (error) {
+      console.log(error);
+      return false;
+    }
+
+    return true;
+  };
+
+  const uploadImageToStorage = async (file: File, bucket: string) => {
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(2)}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(bucket)
+      .upload(fileName, file);
+
+    if (uploadError) {
+      console.log(uploadError);
+      alert("이미지 업로드 실패");
+      return null;
+    }
+
+    const { data } = supabase.storage.from(bucket).getPublicUrl(fileName);
+
+    return data.publicUrl;
+  };
 
   const getNextDisplayOrder = async () => {
     const { data, error } = await supabase
@@ -66,7 +272,7 @@ export default function AdminPage() {
 
     if (error) {
       console.log(error);
-      return approvedEvents.length + 1;
+      return events.filter((event) => event.approved).length + 1;
     }
 
     const currentMax = data?.[0]?.display_order;
@@ -98,6 +304,30 @@ export default function AdminPage() {
     fetchEvents();
   };
 
+  const cancelApproveEvent = async (id: string) => {
+    setIsSaving(true);
+
+    const { error } = await supabase
+      .from("events")
+      .update({
+        approved: false,
+        is_featured: false,
+        display_order: null,
+      })
+      .eq("id", id);
+
+    setIsSaving(false);
+
+    if (error) {
+      console.log(error);
+      alert("승인 취소 실패");
+      return;
+    }
+
+    alert("승인 취소 완료");
+    fetchEvents();
+  };
+
   const setFeaturedEvent = async (id: string) => {
     setIsSaving(true);
 
@@ -116,7 +346,8 @@ export default function AdminPage() {
     const { error: featureError } = await supabase
       .from("events")
       .update({ is_featured: true })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("approved", true);
 
     setIsSaving(false);
 
@@ -156,8 +387,8 @@ export default function AdminPage() {
         supabase
           .from("events")
           .update({ display_order: index + 1 })
-          .eq("id", event.id),
-      ),
+          .eq("id", event.id)
+      )
     );
 
     const failedResult = updateResults.find((result) => result.error);
@@ -169,14 +400,17 @@ export default function AdminPage() {
   };
 
   const moveEvent = async (id: string, direction: "up" | "down") => {
-    const regularEvents = approvedEvents.filter((event) => !event.is_featured);
+    const regularEvents = events.filter(
+      (event) => event.approved && !event.is_featured
+    );
     const currentIndex = regularEvents.findIndex((event) => event.id === id);
 
     if (currentIndex === -1) {
       return;
     }
 
-    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    const targetIndex =
+      direction === "up" ? currentIndex - 1 : currentIndex + 1;
 
     if (targetIndex < 0 || targetIndex >= regularEvents.length) {
       return;
@@ -201,191 +435,1152 @@ export default function AdminPage() {
     }
   };
 
-  const regularEvents = approvedEvents.filter((event) => !event.is_featured);
+  const resetEventViews = async (event: EventItem) => {
+    const confirmed = window.confirm(
+      `"${event.title}"의 조회수를 0으로 초기화하시겠습니까?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("events")
+      .update({ views: 0 })
+      .eq("id", event.id);
+
+    if (error) {
+      console.log(error);
+      alert("조회수 초기화 실패");
+      return;
+    }
+
+    alert("조회수를 0으로 초기화했습니다.");
+    fetchEvents();
+  };
+
+  const startEditEvent = (event: EventItem) => {
+    setEditingEventId(event.id);
+    setEditEventTitle(event.title || "");
+    setEditEventDate(event.event_date || "");
+    setEditEventLocation(event.location || "");
+    setEditEventAuthor(event.author || "");
+    setEditEventDescription(event.description || "");
+    setEditEventUploadType(event.upload_type === "video" ? "video" : "image");
+    setEditEventVideoUrl(event.video_url || "");
+    setEditEventImageFile(null);
+  };
+
+  const cancelEditEvent = () => {
+    setEditingEventId(null);
+    setEditEventTitle("");
+    setEditEventDate("");
+    setEditEventLocation("");
+    setEditEventAuthor("");
+    setEditEventDescription("");
+    setEditEventUploadType("image");
+    setEditEventVideoUrl("");
+    setEditEventImageFile(null);
+  };
+
+  const saveEditEvent = async (event: EventItem) => {
+    if (
+      !editEventTitle ||
+      !editEventDate ||
+      !editEventLocation ||
+      !editEventDescription
+    ) {
+      alert("행사명, 날짜, 장소, 소개 내용을 입력해주세요.");
+      return;
+    }
+
+    const updateData: Partial<EventItem> = {
+      title: editEventTitle,
+      event_date: editEventDate,
+      location: editEventLocation,
+      author: editEventAuthor,
+      description: editEventDescription,
+      upload_type: editEventUploadType,
+      video_url: editEventUploadType === "video" ? editEventVideoUrl : "",
+    };
+
+    if (editEventUploadType === "video") {
+      if (event.image_url) {
+        const imageDeleted = await deleteImageFromStorage(
+          event.image_url,
+          "event-images"
+        );
+
+        if (!imageDeleted) {
+          alert("기존 이미지 삭제 실패. 수정을 중단합니다.");
+          return;
+        }
+      }
+
+      updateData.image_url = "";
+    }
+
+    if (editEventUploadType === "image" && editEventImageFile) {
+      const newImageUrl = await uploadImageToStorage(
+        editEventImageFile,
+        "event-images"
+      );
+
+      if (!newImageUrl) {
+        return;
+      }
+
+      if (event.image_url) {
+        await deleteImageFromStorage(event.image_url, "event-images");
+      }
+
+      updateData.image_url = newImageUrl;
+    }
+
+    const { error } = await supabase
+      .from("events")
+      .update(updateData)
+      .eq("id", event.id);
+
+    if (error) {
+      console.log(error);
+      alert("행사 수정 실패");
+      return;
+    }
+
+    alert("행사 수정 완료");
+    cancelEditEvent();
+    fetchEvents();
+  };
+
+  const deleteEvent = async (event: EventItem) => {
+    const confirmDelete = window.confirm(
+      `"${event.title}" 행사를 삭제하시겠습니까?\n이미지가 있으면 함께 삭제됩니다.`
+    );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    if (event.image_url) {
+      const imageDeleted = await deleteImageFromStorage(
+        event.image_url,
+        "event-images"
+      );
+
+      if (!imageDeleted) {
+        alert("이미지 삭제 실패. 글 삭제를 중단합니다.");
+        return;
+      }
+    }
+
+    const { error } = await supabase.from("events").delete().eq("id", event.id);
+
+    if (error) {
+      console.log(error);
+      alert("행사 삭제 실패");
+      return;
+    }
+
+    alert("행사 삭제 완료");
+    fetchEvents();
+  };
+
+  const approveMemory = async (id: string) => {
+    const { error } = await supabase
+      .from("memory_posts")
+      .update({ approved: true })
+      .eq("id", id);
+
+    if (error) {
+      console.log(error);
+      alert("승인 실패");
+      return;
+    }
+
+    alert("승인 완료");
+    fetchMemoryPosts();
+  };
+
+  const cancelApproveMemory = async (id: string) => {
+    const { error } = await supabase
+      .from("memory_posts")
+      .update({ approved: false })
+      .eq("id", id);
+
+    if (error) {
+      console.log(error);
+      alert("승인 취소 실패");
+      return;
+    }
+
+    alert("승인 취소 완료");
+    fetchMemoryPosts();
+  };
+
+  const startEditMemory = (post: MemoryPost) => {
+    setEditingMemoryId(post.id);
+    setEditMemoryTitle(post.title || "");
+    setEditMemoryDate(post.memory_date || "");
+    setEditMemoryLocation(post.location || "");
+    setEditMemoryPersonName(post.person_name || "");
+    setEditMemoryDescription(post.description || "");
+    setEditMemoryImageFile(null);
+  };
+
+  const cancelEditMemory = () => {
+    setEditingMemoryId(null);
+    setEditMemoryTitle("");
+    setEditMemoryDate("");
+    setEditMemoryLocation("");
+    setEditMemoryPersonName("");
+    setEditMemoryDescription("");
+    setEditMemoryImageFile(null);
+  };
+
+  const saveEditMemory = async (post: MemoryPost) => {
+    if (!editMemoryTitle || !editMemoryDescription) {
+      alert("제목과 설명을 입력해주세요.");
+      return;
+    }
+
+    const updateData: Partial<MemoryPost> = {
+      title: editMemoryTitle,
+      memory_date: editMemoryDate,
+      location: editMemoryLocation,
+      person_name: editMemoryPersonName,
+      description: editMemoryDescription,
+    };
+
+    if (editMemoryImageFile) {
+      const newImageUrl = await uploadImageToStorage(
+        editMemoryImageFile,
+        "memory-images"
+      );
+
+      if (!newImageUrl) {
+        return;
+      }
+
+      if (post.image_url) {
+        await deleteImageFromStorage(post.image_url, "memory-images");
+      }
+
+      updateData.image_url = newImageUrl;
+    }
+
+    const { error } = await supabase
+      .from("memory_posts")
+      .update(updateData)
+      .eq("id", post.id);
+
+    if (error) {
+      console.log(error);
+      alert("진안의 시간 수정 실패");
+      return;
+    }
+
+    alert("진안의 시간 수정 완료");
+    cancelEditMemory();
+    fetchMemoryPosts();
+  };
+
+  const deleteMemory = async (post: MemoryPost) => {
+    const confirmDelete = window.confirm(
+      `"${post.title}" 사진 기록을 삭제하시겠습니까?\n이미지가 있으면 함께 삭제됩니다.`
+    );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    if (post.image_url) {
+      const imageDeleted = await deleteImageFromStorage(
+        post.image_url,
+        "memory-images"
+      );
+
+      if (!imageDeleted) {
+        alert("이미지 삭제 실패. 글 삭제를 중단합니다.");
+        return;
+      }
+    }
+
+    const { error } = await supabase
+      .from("memory_posts")
+      .delete()
+      .eq("id", post.id);
+
+    if (error) {
+      console.log(error);
+      alert("사진 기록 삭제 실패");
+      return;
+    }
+
+    alert("사진 기록 삭제 완료");
+    fetchMemoryPosts();
+  };
+
+  const resetNoticeForm = () => {
+    setNoticeTitle("");
+    setNoticeDate("");
+    setNoticeContent("");
+    setNoticePublished(true);
+    setEditingNoticeId(null);
+  };
+
+  const saveNotice = async () => {
+    if (!noticeTitle || !noticeContent) {
+      alert("공지 제목과 내용을 입력해주세요.");
+      return;
+    }
+
+    if (editingNoticeId) {
+      const { error } = await supabase
+        .from("notices")
+        .update({
+          title: noticeTitle,
+          content: noticeContent,
+          notice_date: noticeDate,
+          published: noticePublished,
+        })
+        .eq("id", editingNoticeId);
+
+      if (error) {
+        console.log(error);
+        alert("공지 수정 실패");
+        return;
+      }
+
+      alert("공지 수정 완료");
+      resetNoticeForm();
+      fetchNotices();
+      return;
+    }
+
+    const { error } = await supabase.from("notices").insert([
+      {
+        title: noticeTitle,
+        content: noticeContent,
+        notice_date: noticeDate,
+        published: noticePublished,
+      },
+    ]);
+
+    if (error) {
+      console.log(error);
+      alert("공지 등록 실패");
+      return;
+    }
+
+    alert("공지 등록 완료");
+    resetNoticeForm();
+    fetchNotices();
+  };
+
+  const startEditNotice = (notice: NoticeItem) => {
+    setEditingNoticeId(notice.id);
+    setNoticeTitle(notice.title);
+    setNoticeDate(notice.notice_date || "");
+    setNoticeContent(notice.content);
+    setNoticePublished(notice.published);
+  };
+
+  const deleteNotice = async (notice: NoticeItem) => {
+    const confirmDelete = window.confirm(
+      `"${notice.title}" 공지사항을 삭제하시겠습니까?`
+    );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("notices")
+      .delete()
+      .eq("id", notice.id);
+
+    if (error) {
+      console.log(error);
+      alert("공지 삭제 실패");
+      return;
+    }
+
+    alert("공지 삭제 완료");
+    fetchNotices();
+  };
+
+  const toggleNoticePublished = async (notice: NoticeItem) => {
+    const { error } = await supabase
+      .from("notices")
+      .update({ published: !notice.published })
+      .eq("id", notice.id);
+
+    if (error) {
+      console.log(error);
+      alert("공개 상태 변경 실패");
+      return;
+    }
+
+    fetchNotices();
+  };
+
+  if (!isAdmin) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4 text-black">
+        <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl">
+          <p className="mb-3 text-xs tracking-[0.35em] text-gray-500">
+            JINAN CULTURE ART ADMIN
+          </p>
+
+          <h1 className="mb-4 text-4xl font-black">관리자 로그인</h1>
+
+          <p className="mb-8 leading-relaxed text-gray-600">
+            Supabase 관리자 계정으로 로그인해주세요.
+          </p>
+
+          <input
+            type="email"
+            className="mb-4 w-full rounded-2xl border border-gray-300 p-4"
+            placeholder="관리자 이메일"
+            value={adminEmail}
+            onChange={(e) => setAdminEmail(e.target.value)}
+          />
+
+          <input
+            type="password"
+            className="mb-4 w-full rounded-2xl border border-gray-300 p-4"
+            placeholder="관리자 비밀번호"
+            value={adminPassword}
+            onChange={(e) => setAdminPassword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleLogin();
+              }
+            }}
+          />
+
+          {loginError && (
+            <p className="mb-4 text-sm font-semibold text-red-600">
+              {loginError}
+            </p>
+          )}
+
+          <button
+            onClick={handleLogin}
+            className="w-full rounded-2xl bg-black py-4 text-lg font-bold text-white transition hover:bg-gray-800"
+          >
+            관리자 로그인
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  const waitingEvents = events.filter((event) => !event.approved);
+  const waitingMemory = memoryPosts.filter((post) => !post.approved);
+  const approvedEvents = events.filter((event) => event.approved);
+  const regularApprovedEvents = approvedEvents.filter(
+    (event) => !event.is_featured
+  );
+
+  const getRegularEventIndex = (id: string) =>
+    regularApprovedEvents.findIndex((event) => event.id === id);
+
+  const isFirstRegularEvent = (id: string) =>
+    getRegularEventIndex(id) === 0;
+
+  const isLastRegularEvent = (id: string) => {
+    const index = getRegularEventIndex(id);
+    return index === regularApprovedEvents.length - 1;
+  };
 
   return (
     <main className="min-h-screen bg-gray-100 px-4 py-10 text-black md:p-10">
-      <div className="mx-auto max-w-5xl">
-        <h1 className="mb-4 text-4xl font-black md:text-5xl">
-          관리자 페이지
-        </h1>
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-8 rounded-3xl bg-white p-6 shadow-lg md:p-8">
+          <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="mb-3 text-xs tracking-[0.35em] text-gray-500">
+                JINAN CULTURE ART ADMIN
+              </p>
 
-        <p className="mb-10 text-gray-600">
-          행사 승인과 메인페이지 문화소식 표시 순서를 관리합니다.
-        </p>
+              <h1 className="mb-4 text-4xl font-black md:text-5xl">
+                관리자 페이지
+              </h1>
 
-        {/* 승인 대기 */}
-        <section className="mb-16">
-          <div className="mb-6 flex items-end justify-between gap-4">
-            <h2 className="text-3xl font-black">승인 대기</h2>
-            <span className="text-sm text-gray-500">
-              {pendingEvents.length}건
-            </span>
+              <p className="leading-relaxed text-gray-600">
+                행사, 진안의 시간 사진 기록, 공지사항을 관리합니다.
+              </p>
+
+              <p className="mt-3 text-sm font-semibold text-gray-500">
+                로그인 계정: {currentAdminEmail}
+              </p>
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="rounded-2xl border border-gray-300 px-5 py-3 font-bold text-gray-700 transition hover:bg-gray-100"
+            >
+              로그아웃
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-8 grid gap-4 md:grid-cols-5">
+          <div className="rounded-3xl bg-white p-6 shadow">
+            <p className="mb-2 text-sm text-gray-500">전체 행사</p>
+            <p className="text-4xl font-black">{events.length}</p>
           </div>
 
-          {pendingEvents.length === 0 ? (
-            <div className="rounded-3xl bg-white p-8 text-gray-500 shadow">
-              승인 대기 중인 행사가 없습니다.
-            </div>
-          ) : (
-            <div className="grid gap-6">
-              {pendingEvents.map((event) => (
-                <article
-                  key={event.id}
-                  className="rounded-3xl bg-white p-6 shadow-lg md:p-8"
-                >
-                  {event.image_url && (
-                    <img
-                      src={event.image_url}
-                      alt={event.title}
-                      className="mb-6 h-64 w-full rounded-2xl object-cover"
-                    />
-                  )}
-
-                  <p className="mb-2 text-sm text-gray-500">
-                    {event.event_date}
-                  </p>
-
-                  <h3 className="mb-4 text-2xl font-bold md:text-3xl">
-                    {event.title}
-                  </h3>
-
-                  <p className="mb-4 text-gray-600">{event.location}</p>
-
-                  <p className="mb-6 whitespace-pre-wrap leading-relaxed text-gray-700">
-                    {event.description}
-                  </p>
-
-                  <button
-                    type="button"
-                    disabled={isSaving}
-                    onClick={() => approveEvent(event.id)}
-                    className="rounded-2xl bg-black px-6 py-4 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    승인하기
-                  </button>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 승인된 문화소식 순서 관리 */}
-        <section>
-          <div className="mb-6">
-            <h2 className="mb-3 text-3xl font-black">
-              문화소식 순서 관리
-            </h2>
-            <p className="text-gray-600">
-              맨앞 고정은 한 건만 가능하며, 나머지 소식은 위·아래 버튼으로
-              순서를 바꿀 수 있습니다.
+          <div className="rounded-3xl bg-white p-6 shadow">
+            <p className="mb-2 text-sm text-gray-500">행사 승인 대기</p>
+            <p className="text-4xl font-black text-orange-600">
+              {waitingEvents.length}
             </p>
           </div>
 
-          {approvedEvents.length === 0 ? (
-            <div className="rounded-3xl bg-white p-8 text-gray-500 shadow">
-              승인된 문화소식이 없습니다.
-            </div>
-          ) : (
-            <div className="grid gap-5">
-              {approvedEvents.map((event) => {
-                const regularIndex = regularEvents.findIndex(
-                  (item) => item.id === event.id,
-                );
-                const isFirstRegular = regularIndex === 0;
-                const isLastRegular = regularIndex === regularEvents.length - 1;
+          <div className="rounded-3xl bg-white p-6 shadow">
+            <p className="mb-2 text-sm text-gray-500">사진 승인 대기</p>
+            <p className="text-4xl font-black text-orange-600">
+              {waitingMemory.length}
+            </p>
+          </div>
 
-                return (
-                  <article
+          <div className="rounded-3xl bg-white p-6 shadow">
+            <p className="mb-2 text-sm text-gray-500">공지사항</p>
+            <p className="text-4xl font-black">{notices.length}</p>
+          </div>
+
+          <div className="rounded-3xl bg-white p-6 shadow">
+            <p className="mb-2 text-sm text-gray-500">공개 공지</p>
+            <p className="text-4xl font-black text-green-600">
+              {notices.filter((notice) => notice.published).length}
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-8 flex flex-col gap-3 rounded-3xl bg-white p-4 shadow sm:flex-row">
+          <button
+            onClick={() => setActiveTab("events")}
+            className={`rounded-2xl px-6 py-4 font-bold transition ${
+              activeTab === "events"
+                ? "bg-black text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            문화행사 관리
+          </button>
+
+          <button
+            onClick={() => setActiveTab("memory")}
+            className={`rounded-2xl px-6 py-4 font-bold transition ${
+              activeTab === "memory"
+                ? "bg-black text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            진안의 시간 관리
+          </button>
+
+          <button
+            onClick={() => setActiveTab("notices")}
+            className={`rounded-2xl px-6 py-4 font-bold transition ${
+              activeTab === "notices"
+                ? "bg-black text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            공지사항 관리
+          </button>
+        </div>
+
+        {activeTab === "events" && (
+          <section>
+            <h2 className="mb-6 text-3xl font-black">문화행사 관리</h2>
+
+            {events.length === 0 ? (
+              <div className="rounded-3xl bg-white p-8 text-gray-500 shadow">
+                등록된 행사가 없습니다.
+              </div>
+            ) : (
+              <div className="grid gap-6">
+                {events.map((event) => (
+                  <div
                     key={event.id}
-                    className={`rounded-3xl border-2 bg-white p-5 shadow-lg md:p-7 ${
-                      event.is_featured
-                        ? "border-amber-400"
-                        : "border-transparent"
-                    }`}
+                    className="overflow-hidden rounded-3xl bg-white shadow-lg"
                   >
-                    <div className="flex flex-col gap-5 md:flex-row md:items-center">
-                      {event.image_url && (
-                        <img
-                          src={event.image_url}
-                          alt={event.title}
-                          className="h-36 w-full rounded-2xl object-cover md:w-52"
-                        />
-                      )}
-
-                      <div className="min-w-0 flex-1">
-                        <div className="mb-2 flex flex-wrap items-center gap-2">
-                          {event.is_featured && (
-                            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
-                              맨앞 고정됨
-                            </span>
-                          )}
-                          {!event.is_featured && (
-                            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-600">
-                              일반 순서 {regularIndex + 1}
-                            </span>
-                          )}
-                          <span className="text-sm text-gray-500">
-                            {event.event_date}
-                          </span>
-                        </div>
-
-                        <h3 className="mb-2 text-xl font-bold md:text-2xl">
-                          {event.title}
+                    {editingEventId === event.id ? (
+                      <div className="p-6 md:p-8">
+                        <h3 className="mb-5 text-2xl font-black">
+                          문화행사 수정
                         </h3>
-                        <p className="text-gray-600">{event.location}</p>
-                      </div>
 
-                      <div className="flex flex-wrap gap-2 md:w-56 md:justify-end">
-                        {event.is_featured ? (
-                          <button
-                            type="button"
-                            disabled={isSaving}
-                            onClick={() => clearFeaturedEvent(event.id)}
-                            className="rounded-xl bg-gray-700 px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        <div className="grid gap-4">
+                          <select
+                            className="rounded-2xl border border-gray-300 bg-white p-4"
+                            value={editEventUploadType}
+                            onChange={(e) =>
+                              setEditEventUploadType(
+                                e.target.value as "image" | "video"
+                              )
+                            }
                           >
-                            고정 해제
-                          </button>
+                            <option value="image">이미지 행사</option>
+                            <option value="video">영상 행사</option>
+                          </select>
+
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="행사명"
+                            value={editEventTitle}
+                            onChange={(e) => setEditEventTitle(e.target.value)}
+                          />
+
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="행사 날짜"
+                            value={editEventDate}
+                            onChange={(e) => setEditEventDate(e.target.value)}
+                          />
+
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="행사 장소"
+                            value={editEventLocation}
+                            onChange={(e) =>
+                              setEditEventLocation(e.target.value)
+                            }
+                          />
+
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="작성자"
+                            value={editEventAuthor}
+                            onChange={(e) =>
+                              setEditEventAuthor(e.target.value)
+                            }
+                          />
+
+                          <textarea
+                            className="min-h-40 rounded-2xl border border-gray-300 p-4"
+                            placeholder="행사 소개"
+                            value={editEventDescription}
+                            onChange={(e) =>
+                              setEditEventDescription(e.target.value)
+                            }
+                          />
+
+                          {editEventUploadType === "video" ? (
+                            <input
+                              className="rounded-2xl border border-gray-300 p-4"
+                              placeholder="유튜브 영상 주소"
+                              value={editEventVideoUrl}
+                              onChange={(e) =>
+                                setEditEventVideoUrl(e.target.value)
+                              }
+                            />
+                          ) : (
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="rounded-2xl border border-gray-300 bg-white p-4"
+                              onChange={(e) =>
+                                setEditEventImageFile(
+                                  e.target.files?.[0] || null
+                                )
+                              }
+                            />
+                          )}
+
+                          <div className="flex flex-col gap-3 sm:flex-row">
+                            <button
+                              onClick={() => saveEditEvent(event)}
+                              className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
+                            >
+                              수정 저장
+                            </button>
+
+                            <button
+                              onClick={cancelEditEvent}
+                              className="rounded-2xl bg-gray-200 px-6 py-4 font-bold text-gray-700"
+                            >
+                              취소
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {event.upload_type === "video" && event.video_url ? (
+                          <div className="bg-gray-100 p-6">
+                            <p className="mb-3 text-sm font-bold text-gray-500">
+                              영상행사
+                            </p>
+
+                            <a
+                              href={event.video_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex rounded-2xl bg-red-600 px-6 py-3 font-bold text-white"
+                            >
+                              유튜브 영상 보기
+                            </a>
+                          </div>
                         ) : (
-                          <button
-                            type="button"
-                            disabled={isSaving}
-                            onClick={() => setFeaturedEvent(event.id)}
-                            className="rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-black disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            맨앞 고정
-                          </button>
+                          event.image_url && (
+                            <img
+                              src={event.image_url}
+                              alt={event.title}
+                              className="max-h-[680px] w-full bg-gray-100 object-contain"
+                            />
+                          )
                         )}
 
-                        {!event.is_featured && (
-                          <>
-                            <button
-                              type="button"
-                              disabled={isSaving || isFirstRegular}
-                              onClick={() => moveEvent(event.id, "up")}
-                              className="rounded-xl bg-blue-700 px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+                        <div className="p-6 md:p-8">
+                          <div className="mb-5 flex flex-wrap gap-2">
+                            <span
+                              className={`inline-flex rounded-full px-4 py-2 text-sm font-bold ${
+                                event.approved
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-orange-100 text-orange-700"
+                              }`}
                             >
-                              ▲ 위로
+                              {event.approved ? "승인 완료" : "승인 대기"}
+                            </span>
+
+                            {event.approved && event.is_featured && (
+                              <span className="inline-flex rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-800">
+                                맨앞 고정됨
+                              </span>
+                            )}
+
+                            {event.approved && !event.is_featured && (
+                              <span className="inline-flex rounded-full bg-gray-100 px-4 py-2 text-sm font-bold text-gray-600">
+                                일반 순서 {getRegularEventIndex(event.id) + 1}
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="mb-2 text-sm text-gray-500">
+                            {event.event_date}
+                          </p>
+
+                          <h3 className="mb-4 text-3xl font-bold">
+                            {event.title}
+                          </h3>
+
+                          <p className="mb-3 font-semibold text-gray-600">
+                            장소: {event.location}
+                          </p>
+
+                          {event.author && (
+                            <p className="mb-3 text-sm text-gray-500">
+                              작성자: {event.author}
+                            </p>
+                          )}
+
+                          <p className="mb-5 text-sm font-bold text-blue-600">
+                            조회수: {event.views ?? 0}
+                          </p>
+
+                          <p className="mb-8 whitespace-pre-line leading-relaxed text-gray-700">
+                            {event.description}
+                          </p>
+
+                          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                            {!event.approved ? (
+                              <button
+                                disabled={isSaving}
+                                onClick={() => approveEvent(event.id)}
+                                className="rounded-2xl bg-black px-6 py-4 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                승인하기
+                              </button>
+                            ) : (
+                              <button
+                                disabled={isSaving}
+                                onClick={() => cancelApproveEvent(event.id)}
+                                className="rounded-2xl bg-orange-500 px-6 py-4 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                승인취소
+                              </button>
+                            )}
+
+                            {event.approved &&
+                              (event.is_featured ? (
+                                <button
+                                  disabled={isSaving}
+                                  onClick={() => clearFeaturedEvent(event.id)}
+                                  className="rounded-2xl bg-gray-700 px-6 py-4 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  고정 해제
+                                </button>
+                              ) : (
+                                <button
+                                  disabled={isSaving}
+                                  onClick={() => setFeaturedEvent(event.id)}
+                                  className="rounded-2xl bg-amber-500 px-6 py-4 font-bold text-black disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  맨앞 고정
+                                </button>
+                              ))}
+
+                            {event.approved && !event.is_featured && (
+                              <>
+                                <button
+                                  disabled={
+                                    isSaving || isFirstRegularEvent(event.id)
+                                  }
+                                  onClick={() => moveEvent(event.id, "up")}
+                                  className="rounded-2xl bg-indigo-600 px-6 py-4 font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+                                >
+                                  ▲ 위로
+                                </button>
+
+                                <button
+                                  disabled={
+                                    isSaving || isLastRegularEvent(event.id)
+                                  }
+                                  onClick={() => moveEvent(event.id, "down")}
+                                  className="rounded-2xl bg-indigo-600 px-6 py-4 font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+                                >
+                                  ▼ 아래로
+                                </button>
+                              </>
+                            )}
+
+                            {event.approved && (
+                              <button
+                                onClick={() => resetEventViews(event)}
+                                className="rounded-2xl bg-violet-600 px-6 py-4 font-bold text-white"
+                              >
+                                조회수 초기화
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => startEditEvent(event)}
+                              className="rounded-2xl bg-blue-600 px-6 py-4 font-bold text-white"
+                            >
+                              수정하기
                             </button>
 
                             <button
-                              type="button"
-                              disabled={isSaving || isLastRegular}
-                              onClick={() => moveEvent(event.id, "down")}
-                              className="rounded-xl bg-blue-700 px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+                              onClick={() => deleteEvent(event)}
+                              className="rounded-2xl bg-red-600 px-6 py-4 font-bold text-white"
                             >
-                              ▼ 아래로
+                              삭제하기
                             </button>
-                          </>
-                        )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === "memory" && (
+          <section>
+            <h2 className="mb-6 text-3xl font-black">진안의 시간 관리</h2>
+
+            {memoryPosts.length === 0 ? (
+              <div className="rounded-3xl bg-white p-8 text-gray-500 shadow">
+                등록된 사진 기록이 없습니다.
+              </div>
+            ) : (
+              <div className="grid gap-6">
+                {memoryPosts.map((post) => (
+                  <div
+                    key={post.id}
+                    className="overflow-hidden rounded-3xl bg-white shadow-lg"
+                  >
+                    {editingMemoryId === post.id ? (
+                      <div className="p-6 md:p-8">
+                        <h3 className="mb-5 text-2xl font-black">
+                          진안의 시간 수정
+                        </h3>
+
+                        <div className="grid gap-4">
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="제목"
+                            value={editMemoryTitle}
+                            onChange={(e) =>
+                              setEditMemoryTitle(e.target.value)
+                            }
+                          />
+
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="시기 예: 1970년대"
+                            value={editMemoryDate}
+                            onChange={(e) => setEditMemoryDate(e.target.value)}
+                          />
+
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="장소"
+                            value={editMemoryLocation}
+                            onChange={(e) =>
+                              setEditMemoryLocation(e.target.value)
+                            }
+                          />
+
+                          <input
+                            className="rounded-2xl border border-gray-300 p-4"
+                            placeholder="제공자"
+                            value={editMemoryPersonName}
+                            onChange={(e) =>
+                              setEditMemoryPersonName(e.target.value)
+                            }
+                          />
+
+                          <textarea
+                            className="min-h-40 rounded-2xl border border-gray-300 p-4"
+                            placeholder="설명"
+                            value={editMemoryDescription}
+                            onChange={(e) =>
+                              setEditMemoryDescription(e.target.value)
+                            }
+                          />
+
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="rounded-2xl border border-gray-300 bg-white p-4"
+                            onChange={(e) =>
+                              setEditMemoryImageFile(
+                                e.target.files?.[0] || null
+                              )
+                            }
+                          />
+
+                          <div className="flex flex-col gap-3 sm:flex-row">
+                            <button
+                              onClick={() => saveEditMemory(post)}
+                              className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
+                            >
+                              수정 저장
+                            </button>
+
+                            <button
+                              onClick={cancelEditMemory}
+                              className="rounded-2xl bg-gray-200 px-6 py-4 font-bold text-gray-700"
+                            >
+                              취소
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </article>
-                );
-              })}
+                    ) : (
+                      <>
+                        {post.image_url && (
+                          <img
+                            src={post.image_url}
+                            alt={post.title}
+                            className="max-h-[680px] w-full bg-gray-100 object-contain"
+                          />
+                        )}
+
+                        <div className="p-6 md:p-8">
+                          <span
+                            className={`mb-5 inline-flex rounded-full px-4 py-2 text-sm font-bold ${
+                              post.approved
+                                ? "bg-green-100 text-green-700"
+                                : "bg-orange-100 text-orange-700"
+                            }`}
+                          >
+                            {post.approved ? "승인 완료" : "승인 대기"}
+                          </span>
+
+                          <p className="mb-2 text-sm text-gray-500">
+                            {post.memory_date || "시기 미상"}
+                          </p>
+
+                          <h3 className="mb-4 text-3xl font-bold">
+                            {post.title}
+                          </h3>
+
+                          {post.location && (
+                            <p className="mb-3 font-semibold text-gray-600">
+                              장소: {post.location}
+                            </p>
+                          )}
+
+                          {post.person_name && (
+                            <p className="mb-5 text-sm text-gray-500">
+                              제공: {post.person_name}
+                            </p>
+                          )}
+
+                          <p className="mb-8 whitespace-pre-line leading-relaxed text-gray-700">
+                            {post.description}
+                          </p>
+
+                          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                            {!post.approved ? (
+                              <button
+                                onClick={() => approveMemory(post.id)}
+                                className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
+                              >
+                                승인하기
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => cancelApproveMemory(post.id)}
+                                className="rounded-2xl bg-orange-500 px-6 py-4 font-bold text-white"
+                              >
+                                승인취소
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => startEditMemory(post)}
+                              className="rounded-2xl bg-blue-600 px-6 py-4 font-bold text-white"
+                            >
+                              수정하기
+                            </button>
+
+                            <button
+                              onClick={() => deleteMemory(post)}
+                              className="rounded-2xl bg-red-600 px-6 py-4 font-bold text-white"
+                            >
+                              삭제하기
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === "notices" && (
+          <section>
+            <h2 className="mb-6 text-3xl font-black">공지사항 관리</h2>
+
+            <div className="mb-8 rounded-3xl bg-white p-6 shadow md:p-8">
+              <h3 className="mb-5 text-2xl font-black">
+                {editingNoticeId ? "공지사항 수정" : "새 공지사항 등록"}
+              </h3>
+
+              <div className="grid gap-4">
+                <input
+                  className="rounded-2xl border border-gray-300 p-4"
+                  placeholder="공지 제목"
+                  value={noticeTitle}
+                  onChange={(e) => setNoticeTitle(e.target.value)}
+                />
+
+                <input
+                  className="rounded-2xl border border-gray-300 p-4"
+                  placeholder="공지 날짜 예: 2026.05.26"
+                  value={noticeDate}
+                  onChange={(e) => setNoticeDate(e.target.value)}
+                />
+
+                <textarea
+                  className="min-h-40 rounded-2xl border border-gray-300 p-4"
+                  placeholder="공지 내용"
+                  value={noticeContent}
+                  onChange={(e) => setNoticeContent(e.target.value)}
+                />
+
+                <label className="flex items-center gap-3 font-bold text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={noticePublished}
+                    onChange={(e) => setNoticePublished(e.target.checked)}
+                  />
+                  공개 상태로 게시
+                </label>
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    onClick={saveNotice}
+                    className="rounded-2xl bg-black px-6 py-4 font-bold text-white"
+                  >
+                    {editingNoticeId ? "공지 수정 저장" : "공지 등록"}
+                  </button>
+
+                  <button
+                    onClick={resetNoticeForm}
+                    className="rounded-2xl bg-gray-200 px-6 py-4 font-bold text-gray-700"
+                  >
+                    입력 초기화
+                  </button>
+                </div>
+              </div>
             </div>
-          )}
-        </section>
+
+            {notices.length === 0 ? (
+              <div className="rounded-3xl bg-white p-8 text-gray-500 shadow">
+                등록된 공지사항이 없습니다.
+              </div>
+            ) : (
+              <div className="grid gap-6">
+                {notices.map((notice) => (
+                  <div
+                    key={notice.id}
+                    className="rounded-3xl bg-white p-6 shadow md:p-8"
+                  >
+                    <span
+                      className={`mb-5 inline-flex rounded-full px-4 py-2 text-sm font-bold ${
+                        notice.published
+                          ? "bg-green-100 text-green-700"
+                          : "bg-gray-200 text-gray-600"
+                      }`}
+                    >
+                      {notice.published ? "공개" : "비공개"}
+                    </span>
+
+                    <p className="mb-2 text-sm text-gray-500">
+                      {notice.notice_date || "공지"}
+                    </p>
+
+                    <h3 className="mb-4 text-3xl font-bold">
+                      {notice.title}
+                    </h3>
+
+                    <p className="mb-8 whitespace-pre-line leading-relaxed text-gray-700">
+                      {notice.content}
+                    </p>
+
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                      <button
+                        onClick={() => startEditNotice(notice)}
+                        className="rounded-2xl bg-blue-600 px-6 py-4 font-bold text-white"
+                      >
+                        수정하기
+                      </button>
+
+                      <button
+                        onClick={() => toggleNoticePublished(notice)}
+                        className="rounded-2xl bg-orange-500 px-6 py-4 font-bold text-white"
+                      >
+                        {notice.published ? "비공개로 전환" : "공개로 전환"}
+                      </button>
+
+                      <button
+                        onClick={() => deleteNotice(notice)}
+                        className="rounded-2xl bg-red-600 px-6 py-4 font-bold text-white"
+                      >
+                        삭제하기
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </div>
     </main>
   );

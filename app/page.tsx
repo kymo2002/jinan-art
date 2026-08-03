@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -14,6 +15,12 @@ type EventItem = {
   is_featured?: boolean;
   display_order?: number | null;
   created_at?: string;
+  views?: number;
+};
+
+type SiteViewStats = {
+  totalViews: number;
+  todayViews: number;
 };
 
 export default function Home() {
@@ -23,6 +30,10 @@ export default function Home() {
   const [description, setDescription] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [siteViewStats, setSiteViewStats] = useState<SiteViewStats>({
+    totalViews: 0,
+    todayViews: 0,
+  });
 
   const fetchEvents = async () => {
     const { data, error } = await supabase
@@ -41,8 +52,36 @@ export default function Home() {
     setEvents(data || []);
   };
 
+  const fetchSiteViewStats = async () => {
+    const storageKey = "jinan-art-site-view-counted";
+    const alreadyCounted =
+      typeof window !== "undefined" &&
+      window.sessionStorage.getItem(storageKey) === "true";
+
+    const { data, error } = await supabase.rpc(
+      alreadyCounted ? "get_site_view_stats" : "increment_site_view_stats"
+    );
+
+    if (error) {
+      console.log("사이트 조회수 불러오기 실패:", error);
+      return;
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+
+    setSiteViewStats({
+      totalViews: Number(result?.total_views ?? result?.totalViews ?? 0),
+      todayViews: Number(result?.today_views ?? result?.todayViews ?? 0),
+    });
+
+    if (!alreadyCounted && typeof window !== "undefined") {
+      window.sessionStorage.setItem(storageKey, "true");
+    }
+  };
+
   useEffect(() => {
     fetchEvents();
+    fetchSiteViewStats();
   }, []);
 
   const handleSubmit = async () => {
@@ -107,11 +146,34 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-100 text-black">
       {/* HERO */}
-      <section
-        className="relative flex min-h-screen items-center justify-center bg-cover bg-center px-6 text-white"
-        style={{ backgroundImage: "url('/images/main-hero.jpg')" }}
-      >
-        <div className="absolute inset-0 bg-black/45" />
+      <section className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-100 px-6 text-white">
+        {/* 좌우 배경: 같은 사진을 화면 전체에 확대해 흐리게 표시 */}
+        <div
+          className="absolute -inset-10 scale-110 bg-cover bg-center blur-3xl"
+          style={{
+            backgroundImage: "url('/images/main-hero.jpg')",
+            filter: "blur(28px) brightness(1.08) saturate(0.9)",
+          }}
+        />
+
+        {/* 흐린 배경이 너무 진하지 않도록 밝은 막을 아주 약하게 추가 */}
+        <div className="absolute inset-0 bg-white/18" />
+
+        {/* 원본 HERO 전체: 위쪽 하늘부터 아래 꽃밭까지 자르지 않음 */}
+        <img
+          src="/images/main-hero.jpg"
+          alt="진안고원 HERO"
+          className="absolute inset-0 h-full w-full object-contain"
+        />
+
+        {/* 중앙 원본 위에만 약한 음영을 줘 글자 가독성 유지 */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(to right, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.08) 28%, rgba(0,0,0,0.32) 50%, rgba(0,0,0,0.08) 72%, rgba(255,255,255,0.06) 100%)",
+          }}
+        />
 
         <div className="relative z-10 text-center">
           <p className="mb-5 text-xs tracking-[0.45em] text-white/80">
@@ -169,58 +231,55 @@ export default function Home() {
             </p>
           </div>
 
-          {/* CARD SECTION */}
-          <div className="mb-16 grid gap-6 md:grid-cols-3">
-            <div className="overflow-hidden rounded-3xl bg-gray-50 shadow">
+          {/* CARD SECTION: 오늘의 문화 + 진안의 시간 */}
+          <div className="mb-16 grid grid-cols-2 gap-3 md:gap-6">
+            <a
+              href="#events"
+              className="group order-2 relative overflow-hidden rounded-3xl bg-gray-900 shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-2xl md:order-1"
+            >
               <img
                 src="/images/flower-maisan.jpg"
                 alt="오늘의 문화"
-                className="h-80 w-full object-cover"
+                className="h-56 w-full object-cover transition duration-500 group-hover:scale-105 sm:h-72 md:h-96"
               />
-              <div className="p-5">
-                <p className="mb-2 text-xs tracking-[0.25em] text-gray-400">
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 p-4 text-white md:p-7">
+                <span className="mb-3 inline-flex rounded-full border border-white/40 bg-white/15 px-3 py-1 text-[9px] font-bold tracking-[0.25em] backdrop-blur-sm md:text-xs">
                   CULTURE
-                </p>
-                <h3 className="mb-2 text-2xl font-bold">오늘의 문화</h3>
-                <p className="text-gray-600">
+                </span>
+                <h3 className="mb-1 text-xl font-black md:text-3xl">오늘의 문화</h3>
+                <p className="text-xs leading-relaxed text-white/85 md:text-base">
                   진안의 문화예술 소식을 전합니다.
                 </p>
+                <p className="mt-3 text-xs font-bold text-white/90 md:text-sm">
+                  문화행사 보기 →
+                </p>
               </div>
-            </div>
+            </a>
 
-            <div className="overflow-hidden rounded-3xl bg-gray-50 shadow">
+            <a
+              href="/memory"
+              className="group order-1 relative overflow-hidden rounded-3xl bg-gray-900 shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-2xl md:order-2"
+            >
               <img
                 src="/images/old-jinan.jpg"
                 alt="진안의 시간"
-                className="h-80 w-full object-cover"
+                className="h-56 w-full object-cover transition duration-500 group-hover:scale-105 sm:h-72 md:h-96"
               />
-              <div className="p-5">
-                <p className="mb-2 text-xs tracking-[0.25em] text-gray-400">
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 p-4 text-white md:p-7">
+                <span className="mb-3 inline-flex rounded-full border border-white/40 bg-white/15 px-3 py-1 text-[9px] font-bold tracking-[0.25em] backdrop-blur-sm md:text-xs">
                   MEMORY
-                </p>
-                <h3 className="mb-2 text-2xl font-bold">진안의 시간</h3>
-                <p className="text-gray-600">
+                </span>
+                <h3 className="mb-1 text-xl font-black md:text-3xl">진안의 시간</h3>
+                <p className="text-xs leading-relaxed text-white/85 md:text-base">
                   오래된 풍경과 기억을 보존합니다.
                 </p>
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-3xl bg-gray-50 shadow">
-              <img
-                src="/images/festival.jpg"
-                alt="지역 문화 축제"
-                className="h-80 w-full object-cover"
-              />
-              <div className="p-5">
-                <p className="mb-2 text-xs tracking-[0.25em] text-gray-400">
-                  FESTIVAL
-                </p>
-                <h3 className="mb-2 text-2xl font-bold">지역 문화 축제</h3>
-                <p className="text-gray-600">
-                  누구나 참여하는 문화 플랫폼입니다.
+                <p className="mt-3 text-xs font-bold text-white/90 md:text-sm">
+                  사진 기록 보기 →
                 </p>
               </div>
-            </div>
+            </a>
           </div>
 
           {/* UPLOAD FORM */}
@@ -285,49 +344,161 @@ export default function Home() {
 
           {/* EVENT LIST */}
           <div id="events" className="mt-16">
-            <h2 className="mb-8 text-3xl font-black md:text-4xl">
-              등록된 행사
-            </h2>
+            <div className="mb-8 flex items-end justify-between gap-4">
+              <div>
+                <p className="mb-2 text-xs font-bold tracking-[0.28em] text-gray-400">
+                  TODAY&apos;S CULTURE
+                </p>
+                <h2 className="text-3xl font-black md:text-4xl">
+                  오늘의 문화행사
+                </h2>
+              </div>
+
+              <p className="hidden text-sm text-gray-500 md:block">
+                진안의 공연·전시·축제·체험 소식
+              </p>
+            </div>
 
             {events.length === 0 ? (
               <div className="rounded-3xl bg-gray-50 p-8 text-gray-500">
                 아직 승인된 행사가 없습니다.
               </div>
             ) : (
-              <div className="grid gap-6 md:grid-cols-2">
+              <div className="grid grid-cols-2 gap-3 md:gap-6 lg:grid-cols-4">
                 {events.map((event) => (
-                  <div
+                  <Link
                     key={event.id || event.title}
-                    className="rounded-3xl bg-white p-8 shadow-lg"
+                    href={event.id ? `/events/${event.id}` : "#events"}
+                    className="group block overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl md:rounded-3xl"
+                    aria-label={`${event.title} 상세보기`}
                   >
-                    {event.image_url && (
-                      <img
-                        src={event.image_url}
-                        alt={event.title}
-                        className="mb-6 h-72 w-full rounded-2xl object-cover"
-                      />
-                    )}
+                    <div className="relative aspect-[4/5] overflow-hidden bg-gray-100">
+                      {event.image_url ? (
+                        <img
+                          src={event.image_url}
+                          alt={event.title}
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center px-4 text-center text-xs font-bold text-gray-400">
+                          행사 이미지 준비 중
+                        </div>
+                      )}
 
-                    <p className="mb-2 text-sm text-gray-500">
-                      {event.event_date}
-                    </p>
+                      <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2 md:p-3">
+                        {event.is_featured ? (
+                          <span className="rounded-full bg-blue-600 px-2.5 py-1 text-[9px] font-black text-white shadow md:text-xs">
+                            맨앞 고정
+                          </span>
+                        ) : (
+                          <span />
+                        )}
 
-                    <h3 className="mb-4 text-2xl font-bold">
-                      {event.title}
-                    </h3>
+                        <span className="rounded-full bg-black/60 px-2.5 py-1 text-[9px] font-bold text-white backdrop-blur-sm md:text-xs">
+                          문화행사
+                        </span>
+                      </div>
+                    </div>
 
-                    <p className="mb-4 text-gray-600">{event.location}</p>
+                    <div className="p-3 md:p-5">
+                      <p className="mb-1.5 text-[10px] font-bold text-blue-600 md:text-sm">
+                        {event.event_date}
+                      </p>
 
-                    <p className="leading-relaxed text-gray-700">
-                      {event.description}
-                    </p>
-                  </div>
+                      <h3
+                        className="mb-2 min-h-[2.6rem] text-sm font-black leading-snug text-gray-900 md:min-h-[3.5rem] md:text-xl"
+                        style={{
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {event.title}
+                      </h3>
+
+                      <div className="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-gray-500 md:text-sm">
+                        <p
+                          className="min-w-0 flex-1 leading-relaxed"
+                          style={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 1,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          📍 {event.location}
+                        </p>
+
+                        <span className="shrink-0" title="조회수">
+                          👁 {event.views ?? 0}
+                        </span>
+                      </div>
+
+                      <p
+                        className="text-[10px] leading-relaxed text-gray-600 md:text-sm"
+                        style={{
+                          display: "-webkit-box",
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {event.description}
+                      </p>
+                    </div>
+                  </Link>
                 ))}
               </div>
             )}
           </div>
         </div>
       </section>
+
+      <footer className="border-t border-gray-200 bg-white px-4 py-12 text-center">
+        <div className="mx-auto max-w-6xl">
+          <p className="mb-2 text-xl font-black">진안문화아트</p>
+          <p className="mb-7 text-sm leading-relaxed text-gray-500">
+            진안의 문화와 오래된 시간을 시민과 함께 기록합니다.
+          </p>
+
+          <div className="mb-8 grid gap-3 sm:grid-cols-2">
+            <a
+              href="https://jinanmunhwa.or.kr/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-2xl bg-blue-700 px-5 py-4 font-bold text-white transition hover:bg-blue-800"
+            >
+              진안문화원 홈페이지 ↗
+            </a>
+            <a
+              href="https://blog.naver.com/kymo2002"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-2xl bg-green-600 px-5 py-4 font-bold text-white transition hover:bg-green-700"
+            >
+              有河의 鎭安 이야기 블로그 ↗
+            </a>
+          </div>
+
+          <div className="mb-8 flex flex-wrap items-center justify-center gap-3 text-sm">
+            <span className="rounded-full bg-gray-100 px-4 py-2 font-bold text-gray-700">
+              전체 조회수 {siteViewStats.totalViews.toLocaleString()}
+            </span>
+            <span className="rounded-full bg-gray-100 px-4 py-2 font-bold text-gray-700">
+              오늘 조회수 {siteViewStats.todayViews.toLocaleString()}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-sm font-semibold text-gray-500">
+            <Link href="/memory" className="transition hover:text-black">진안의 시간</Link>
+            <Link href="/notices" className="transition hover:text-black">공지사항</Link>
+            <Link href="/admin" className="transition hover:text-black">관리자 메뉴</Link>
+          </div>
+
+          <p className="mt-8 text-xs text-gray-400">© JINAN CULTURE ART</p>
+        </div>
+      </footer>
     </main>
   );
 }
