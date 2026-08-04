@@ -9,6 +9,7 @@ type EventItem = {
   title: string;
   event_date: string;
   location: string;
+  author?: string;
   description: string;
   approved: boolean;
   image_url?: string;
@@ -27,6 +28,7 @@ export default function Home() {
   const [title, setTitle] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [location, setLocation] = useState("");
+  const [author, setAuthor] = useState("");
   const [description, setDescription] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -85,8 +87,8 @@ export default function Home() {
   }, []);
 
   const handleSubmit = async () => {
-    if (!title || !eventDate || !location || !description) {
-      alert("모든 항목을 입력해주세요.");
+    if (!title || !eventDate || !location || !author || !description) {
+      alert("행사명, 행사 날짜, 행사 장소, 작성자, 행사 소개를 모두 입력해주세요.");
       return;
     }
 
@@ -120,6 +122,7 @@ export default function Home() {
         title,
         event_date: eventDate,
         location,
+        author,
         description,
         image_url: imageUrl,
         approved: false,
@@ -139,6 +142,7 @@ export default function Home() {
     setTitle("");
     setEventDate("");
     setLocation("");
+    setAuthor("");
     setDescription("");
     setImageFile(null);
   };
@@ -319,6 +323,13 @@ export default function Home() {
                 onChange={(e) => setLocation(e.target.value)}
               />
 
+              <input
+                className="rounded-2xl border border-gray-300 p-4"
+                placeholder="작성자(이름 또는 단체명)"
+                value={author}
+                onChange={(e) => setAuthor(e.target.value)}
+              />
+
               <textarea
                 className="min-h-40 rounded-2xl border border-gray-300 p-4"
                 placeholder="행사 소개"
@@ -385,19 +396,6 @@ export default function Home() {
                         </div>
                       )}
 
-                      <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2 md:p-3">
-                        {event.is_featured ? (
-                          <span className="rounded-full bg-blue-600 px-2.5 py-1 text-[9px] font-black text-white shadow md:text-xs">
-                            맨앞 고정
-                          </span>
-                        ) : (
-                          <span />
-                        )}
-
-                        <span className="rounded-full bg-black/60 px-2.5 py-1 text-[9px] font-bold text-white backdrop-blur-sm md:text-xs">
-                          문화행사
-                        </span>
-                      </div>
                     </div>
 
                     <div className="p-3 md:p-5">
