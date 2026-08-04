@@ -13,6 +13,8 @@ type EventItem = {
   description: string;
   approved: boolean;
   image_url?: string;
+  upload_type?: "image" | "video";
+  video_url?: string;
   is_featured?: boolean;
   display_order?: number | null;
   created_at?: string;
@@ -26,9 +28,12 @@ type SiteViewStats = {
 
 export default function Home() {
   const [title, setTitle] = useState("");
-  const [eventDate, setEventDate] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [location, setLocation] = useState("");
   const [author, setAuthor] = useState("");
+  const [uploadType, setUploadType] = useState<"image" | "video">("image");
+  const [videoUrl, setVideoUrl] = useState("");
   const [description, setDescription] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -87,14 +92,33 @@ export default function Home() {
   }, []);
 
   const handleSubmit = async () => {
-    if (!title || !eventDate || !location || !author || !description) {
-      alert("행사명, 행사 날짜, 행사 장소, 작성자, 행사 소개를 모두 입력해주세요.");
+    if (
+      !title ||
+      !startDate ||
+      !endDate ||
+      !location ||
+      !author ||
+      !description
+    ) {
+      alert(
+        "행사 제목, 행사 기간, 장소, 작성자, 설명을 모두 입력해주세요."
+      );
+      return;
+    }
+
+    if (endDate < startDate) {
+      alert("종료일은 시작일보다 빠를 수 없습니다.");
+      return;
+    }
+
+    if (uploadType === "video" && !videoUrl.trim()) {
+      alert("유튜브 영상 주소를 입력해주세요.");
       return;
     }
 
     let imageUrl = "";
 
-    if (imageFile) {
+    if (uploadType === "image" && imageFile) {
       const fileExt = imageFile.name.split(".").pop();
       const fileName = `${Date.now()}-${Math.random()
         .toString(36)
@@ -117,6 +141,11 @@ export default function Home() {
       imageUrl = data.publicUrl;
     }
 
+    const eventDate =
+      startDate === endDate
+        ? `${startDate} ~ ${endDate}`
+        : `${startDate} ~ ${endDate}`;
+
     const { error } = await supabase.from("events").insert([
       {
         title,
@@ -124,7 +153,9 @@ export default function Home() {
         location,
         author,
         description,
-        image_url: imageUrl,
+        image_url: uploadType === "image" ? imageUrl : "",
+        upload_type: uploadType,
+        video_url: uploadType === "video" ? videoUrl.trim() : "",
         approved: false,
         is_featured: false,
         display_order: null,
@@ -140,9 +171,12 @@ export default function Home() {
     alert("행사 등록 완료. 관리자 승인 후 게시됩니다.");
 
     setTitle("");
-    setEventDate("");
+    setStartDate("");
+    setEndDate("");
     setLocation("");
     setAuthor("");
+    setUploadType("image");
+    setVideoUrl("");
     setDescription("");
     setImageFile(null);
   };
@@ -287,71 +321,169 @@ export default function Home() {
           </div>
 
           {/* UPLOAD FORM */}
-          <div id="upload" className="rounded-3xl bg-gray-100 p-6 md:p-10">
-            <p className="mb-3 text-xs tracking-[0.35em] text-gray-500">
-              PARTICIPATION
-            </p>
+          <section
+            id="upload"
+            className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm"
+          >
+            <div className="border-b border-gray-200 px-5 py-5 md:px-8">
+              <p className="text-xs font-bold tracking-[0.3em] text-gray-400">
+                PARTICIPATION
+              </p>
+              <h2 className="mt-2 text-2xl font-black md:text-3xl">
+                소식올리기
+              </h2>
+            </div>
 
-            <h2 className="mb-4 text-3xl font-black md:text-4xl">
-              행사 올리기
-            </h2>
+            <div className="p-5 md:p-8">
+              <h3 className="text-2xl font-black md:text-3xl">
+                시민이 직접 문화소식 올리기
+              </h3>
 
-            <p className="mb-8 text-gray-600">
-              진안의 공연, 전시, 축제, 체험, 마을행사를 자유롭게 등록할 수
-              있습니다. 등록된 내용은 관리자 승인 후 게시됩니다.
-            </p>
+              <p className="mt-3 break-keep text-sm leading-7 text-gray-500 md:text-base">
+                이미지를 올리고 행사 날짜를 입력하면 가까운 날짜순으로 자동
+                정렬됩니다. 영상을 선택하면 유튜브 링크로 등록할 수 있습니다.
+                권장 이미지 크기는{" "}
+                <strong className="font-black text-gray-700">
+                  800px × 1200px
+                </strong>
+                입니다. 너무 큰 이미지는 로딩이 느려질 수 있습니다.
+              </p>
 
-            <div className="grid gap-4">
-              <input
-                className="rounded-2xl border border-gray-300 p-4"
-                placeholder="행사명"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
+              <div className="mt-8 grid gap-x-4 gap-y-6 md:grid-cols-2">
+                <label className="block">
+                  <span className="mb-2 block text-sm font-black text-gray-800">
+                    행사 제목
+                  </span>
+                  <input
+                    className="h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
+                    placeholder="예: 정읍 봄 전시회"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                </label>
 
-              <input
-                className="rounded-2xl border border-gray-300 p-4"
-                placeholder="행사 날짜"
-                value={eventDate}
-                onChange={(e) => setEventDate(e.target.value)}
-              />
+                <fieldset className="block">
+                  <legend className="mb-2 text-sm font-black text-gray-800">
+                    행사 기간
+                  </legend>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      aria-label="행사 시작일"
+                      className="h-14 min-w-0 flex-1 rounded-xl border border-gray-300 bg-white px-3 text-sm outline-none transition focus:border-black md:text-base"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                    />
+                    <span className="shrink-0 text-gray-500">~</span>
+                    <input
+                      type="date"
+                      aria-label="행사 종료일"
+                      className="h-14 min-w-0 flex-1 rounded-xl border border-gray-300 bg-white px-3 text-sm outline-none transition focus:border-black md:text-base"
+                      value={endDate}
+                      min={startDate || undefined}
+                      onChange={(e) => setEndDate(e.target.value)}
+                    />
+                  </div>
+                </fieldset>
 
-              <input
-                className="rounded-2xl border border-gray-300 p-4"
-                placeholder="행사 장소"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-              />
+                <label className="block">
+                  <span className="mb-2 block text-sm font-black text-gray-800">
+                    장소
+                  </span>
+                  <input
+                    className="h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
+                    placeholder="예: 진안문화원"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                  />
+                </label>
 
-              <input
-                className="rounded-2xl border border-gray-300 p-4"
-                placeholder="작성자(이름 또는 단체명)"
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-              />
+                <label className="block">
+                  <span className="mb-2 block text-sm font-black text-gray-800">
+                    작성자
+                  </span>
+                  <input
+                    className="h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
+                    placeholder="예: 시민 제보자 또는 단체명"
+                    value={author}
+                    onChange={(e) => setAuthor(e.target.value)}
+                  />
+                </label>
 
-              <textarea
-                className="min-h-40 rounded-2xl border border-gray-300 p-4"
-                placeholder="행사 소개"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
+                <label className="block">
+                  <span className="mb-2 block text-sm font-black text-gray-800">
+                    올릴 파일 종류
+                  </span>
+                  <select
+                    className="h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
+                    value={uploadType}
+                    onChange={(e) => {
+                      const nextType = e.target.value as "image" | "video";
+                      setUploadType(nextType);
+                      setImageFile(null);
+                      setVideoUrl("");
+                    }}
+                  >
+                    <option value="image">이미지</option>
+                    <option value="video">유튜브 영상</option>
+                  </select>
+                </label>
 
-              <input
-                type="file"
-                accept="image/*"
-                className="rounded-2xl border border-gray-300 bg-white p-4"
-                onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-              />
+                {uploadType === "image" ? (
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-black text-gray-800">
+                      파일 업로드
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="block h-14 w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-4 file:py-2 file:font-bold file:text-gray-700"
+                      onChange={(e) =>
+                        setImageFile(e.target.files?.[0] || null)
+                      }
+                    />
+                  </label>
+                ) : (
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-black text-gray-800">
+                      유튜브 영상 주소
+                    </span>
+                    <input
+                      type="url"
+                      className="h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      value={videoUrl}
+                      onChange={(e) => setVideoUrl(e.target.value)}
+                    />
+                  </label>
+                )}
+
+                <label className="block md:col-span-2">
+                  <span className="mb-2 block text-sm font-black text-gray-800">
+                    설명
+                  </span>
+                  <textarea
+                    className="min-h-44 w-full resize-y rounded-xl border border-gray-300 bg-white p-4 text-base leading-7 outline-none transition focus:border-black"
+                    placeholder="행사 설명, 시간, 참가 방법 등을 적어주세요."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </label>
+              </div>
 
               <button
+                type="button"
                 onClick={handleSubmit}
-                className="rounded-2xl bg-black py-4 text-lg font-bold text-white transition hover:bg-gray-800"
+                className="mt-7 w-full rounded-xl bg-black py-4 text-base font-black text-white transition hover:bg-gray-800 md:text-lg"
               >
                 관리자 승인 요청하기
               </button>
+
+              <p className="mt-3 text-center text-xs leading-5 text-gray-400">
+                등록된 문화소식은 관리자 확인과 승인 후 메인화면에 게시됩니다.
+              </p>
             </div>
-          </div>
+          </section>
 
           {/* EVENT LIST */}
           <div id="events" className="mt-16">
