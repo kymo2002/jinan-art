@@ -183,7 +183,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-100 text-black">
+    <main className="min-h-screen overflow-x-hidden bg-gray-100 text-black">
       {/* HERO */}
       <section className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-100 px-6 text-white">
         {/* 좌우 배경: 같은 사진을 화면 전체에 확대해 흐리게 표시 */}
@@ -324,9 +324,9 @@ export default function Home() {
           {/* UPLOAD FORM */}
           <section
             id="upload"
-            className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm"
+            className="w-full min-w-0 max-w-full overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm"
           >
-            <div className="border-b border-gray-200 px-5 py-5 md:px-8">
+            <div className="border-b border-gray-200 px-4 py-5 sm:px-5 md:px-8">
               <p className="text-xs font-bold tracking-[0.3em] text-gray-400">
                 PARTICIPATION
               </p>
@@ -335,8 +335,8 @@ export default function Home() {
               </h2>
             </div>
 
-            <div className="p-5 md:p-8">
-              <h3 className="text-2xl font-black md:text-3xl">
+            <div className="w-full min-w-0 p-4 sm:p-5 md:p-8">
+              <h3 className="break-keep text-2xl font-black leading-tight md:text-3xl">
                 시민이 직접 문화소식 올리기
               </h3>
 
@@ -350,73 +350,87 @@ export default function Home() {
                 입니다. 너무 큰 이미지는 로딩이 느려질 수 있습니다.
               </p>
 
-              <div className="mt-8 grid gap-x-4 gap-y-6 md:grid-cols-2">
-                <label className="block">
+              <div className="mt-8 grid w-full min-w-0 grid-cols-1 gap-x-4 gap-y-6 md:grid-cols-2">
+                <label className="block w-full min-w-0">
                   <span className="mb-2 block text-sm font-black text-gray-800">
                     행사 제목
                   </span>
                   <input
-                    className="h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
+                    className="box-border block h-14 w-full min-w-0 max-w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
                     placeholder="예: 진안문화원의 날"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                   />
                 </label>
 
-                <fieldset className="block">
+                <fieldset className="block w-full min-w-0">
                   <legend className="mb-2 text-sm font-black text-gray-800">
                     행사 기간
                   </legend>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="date"
-                      aria-label="행사 시작일"
-                      className="h-14 min-w-0 flex-1 rounded-xl border border-gray-300 bg-white px-3 text-sm outline-none transition focus:border-black md:text-base"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                    />
-                    <span className="shrink-0 text-gray-500">~</span>
-                    <input
-                      type="date"
-                      aria-label="행사 종료일"
-                      className="h-14 min-w-0 flex-1 rounded-xl border border-gray-300 bg-white px-3 text-sm outline-none transition focus:border-black md:text-base"
-                      value={endDate}
-                      min={startDate || undefined}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
+                  <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
+                    <label className="block w-full min-w-0">
+                      <span className="mb-1 block text-xs font-bold text-gray-500 sm:hidden">
+                        시작일
+                      </span>
+                      <input
+                        type="date"
+                        aria-label="행사 시작일"
+                        className="box-border block h-14 w-full min-w-0 max-w-full rounded-xl border border-gray-300 bg-white px-3 text-sm outline-none transition focus:border-black md:text-base"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                      />
+                    </label>
+
+                    <span className="hidden shrink-0 text-center text-gray-500 sm:block">
+                      ~
+                    </span>
+
+                    <label className="block w-full min-w-0">
+                      <span className="mb-1 block text-xs font-bold text-gray-500 sm:hidden">
+                        종료일
+                      </span>
+                      <input
+                        type="date"
+                        aria-label="행사 종료일"
+                        className="box-border block h-14 w-full min-w-0 max-w-full rounded-xl border border-gray-300 bg-white px-3 text-sm outline-none transition focus:border-black md:text-base"
+                        value={endDate}
+                        min={startDate || undefined}
+                        onChange={(e) => setEndDate(e.target.value)}
+                      />
+                    </label>
                   </div>
                 </fieldset>
 
-                <label className="block">
+                <label className="block w-full min-w-0">
                   <span className="mb-2 block text-sm font-black text-gray-800">
                     장소
                   </span>
                   <input
-                    className="h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
+                    className="box-border block h-14 w-full min-w-0 max-w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
                     placeholder="예: 진안문화원"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                   />
                 </label>
 
-                <label className="block">
+                <label className="block w-full min-w-0">
                   <span className="mb-2 block text-sm font-black text-gray-800">
                     작성자
                   </span>
                   <input
-                    className="h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
+                    className="box-border block h-14 w-full min-w-0 max-w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
                     placeholder="예: 시민 제보자 또는 단체명"
                     value={author}
                     onChange={(e) => setAuthor(e.target.value)}
                   />
                 </label>
 
-                <label className="block">
+                <label className="block w-full min-w-0">
                   <span className="mb-2 block text-sm font-black text-gray-800">
                     올릴 파일 종류
                   </span>
                   <select
-                    className="h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
+                    className="box-border block h-14 w-full min-w-0 max-w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
                     value={uploadType}
                     onChange={(e) => {
                       const nextType = e.target.value as "image" | "video";
@@ -431,27 +445,27 @@ export default function Home() {
                 </label>
 
                 {uploadType === "image" ? (
-                  <label className="block">
+                  <label className="block w-full min-w-0">
                     <span className="mb-2 block text-sm font-black text-gray-800">
                       파일 업로드
                     </span>
                     <input
                       type="file"
                       accept="image/*"
-                      className="block h-14 w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-4 file:py-2 file:font-bold file:text-gray-700"
+                      className="box-border block min-h-14 w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-gray-300 bg-white px-2 py-2 text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-gray-700 sm:px-3 sm:text-sm sm:file:mr-3 sm:file:px-4 sm:file:text-sm"
                       onChange={(e) =>
                         setImageFile(e.target.files?.[0] || null)
                       }
                     />
                   </label>
                 ) : (
-                  <label className="block">
+                  <label className="block w-full min-w-0">
                     <span className="mb-2 block text-sm font-black text-gray-800">
                       유튜브 영상 주소
                     </span>
                     <input
                       type="url"
-                      className="h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
+                      className="box-border block h-14 w-full min-w-0 max-w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
                       placeholder="https://www.youtube.com/watch?v=..."
                       value={videoUrl}
                       onChange={(e) => setVideoUrl(e.target.value)}
@@ -464,7 +478,7 @@ export default function Home() {
                     설명
                   </span>
                   <textarea
-                    className="min-h-44 w-full resize-y rounded-xl border border-gray-300 bg-white p-4 text-base leading-7 outline-none transition focus:border-black"
+                    className="box-border block min-h-44 w-full min-w-0 max-w-full resize-y rounded-xl border border-gray-300 bg-white p-4 text-base leading-7 outline-none transition focus:border-black"
                     placeholder="행사 설명, 시간, 참가 방법 등을 적어주세요."
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
@@ -608,7 +622,7 @@ export default function Home() {
               rel="noopener noreferrer"
               className="rounded-2xl bg-green-600 px-5 py-4 font-bold text-white transition hover:bg-green-700"
             >
-              有河의 鎭安 이야기 블로그 ↗
+              鎭安 이야기 블로그 ↗
             </a>
           </div>
 
