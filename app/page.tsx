@@ -49,6 +49,7 @@ export default function Home() {
       .eq("approved", true)
       .order("is_featured", { ascending: false })
       .order("display_order", { ascending: true, nullsFirst: false })
+      .order("event_date", { ascending: true })
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -356,7 +357,7 @@ export default function Home() {
                   </span>
                   <input
                     className="h-14 w-full rounded-xl border border-gray-300 bg-white px-4 text-base outline-none transition focus:border-black"
-                    placeholder="예: 정읍 봄 전시회"
+                    placeholder="예: 진안문화원의 날"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                   />

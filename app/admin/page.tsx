@@ -262,33 +262,15 @@ export default function AdminPage() {
     return data.publicUrl;
   };
 
-  const getNextDisplayOrder = async () => {
-    const { data, error } = await supabase
-      .from("events")
-      .select("display_order")
-      .eq("approved", true)
-      .order("display_order", { ascending: false, nullsFirst: false })
-      .limit(1);
-
-    if (error) {
-      console.log(error);
-      return events.filter((event) => event.approved).length + 1;
-    }
-
-    const currentMax = data?.[0]?.display_order;
-    return typeof currentMax === "number" ? currentMax + 1 : 1;
-  };
-
   const approveEvent = async (id: string) => {
     setIsSaving(true);
 
-    const nextOrder = await getNextDisplayOrder();
     const { error } = await supabase
       .from("events")
       .update({
         approved: true,
         is_featured: false,
-        display_order: nextOrder,
+        display_order: null,
       })
       .eq("id", id);
 
@@ -300,7 +282,7 @@ export default function AdminPage() {
       return;
     }
 
-    alert("승인 완료");
+    alert("승인 완료. 행사 날짜순으로 자동 배치됩니다.");
     fetchEvents();
   };
 
@@ -378,6 +360,35 @@ export default function AdminPage() {
     }
 
     alert("맨앞 고정을 해제했습니다.");
+    fetchEvents();
+  };
+
+  const resetEventsToDateOrder = async () => {
+    const confirmed = window.confirm(
+      "관리자가 지정한 일반 행사 순서를 해제하고 행사 날짜순으로 자동정렬하시겠습니까? 맨앞 고정 행사는 그대로 유지됩니다."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    const { error } = await supabase
+      .from("events")
+      .update({ display_order: null })
+      .eq("approved", true)
+      .eq("is_featured", false);
+
+    setIsSaving(false);
+
+    if (error) {
+      console.log(error);
+      alert("날짜순 자동정렬 전환에 실패했습니다.");
+      return;
+    }
+
+    alert("문화소식이 행사 날짜순으로 자동정렬됩니다.");
     fetchEvents();
   };
 
@@ -997,7 +1008,24 @@ export default function AdminPage() {
 
         {activeTab === "events" && (
           <section>
-            <h2 className="mb-6 text-3xl font-black">문화행사 관리</h2>
+            <div className="mb-6 flex flex-col gap-4 rounded-3xl bg-white p-5 shadow sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-3xl font-black">문화행사 관리</h2>
+                <p className="mt-2 text-sm leading-6 text-gray-500">
+                  새로 승인한 문화소식은 행사 날짜순으로 자동 배치됩니다.
+                  ▲·▼ 버튼을 누르면 관리자가 지정한 순서가 우선 적용됩니다.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={resetEventsToDateOrder}
+                disabled={isSaving}
+                className="shrink-0 rounded-2xl bg-blue-600 px-5 py-4 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                날짜순 자동정렬
+              </button>
+            </div>
 
             {events.length === 0 ? (
               <div className="rounded-3xl bg-white p-8 text-gray-500 shadow">
