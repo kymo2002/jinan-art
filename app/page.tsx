@@ -26,6 +26,193 @@ type SiteViewStats = {
   todayViews: number;
 };
 
+type EventPeriod = {
+  start: number | null;
+  end: number | null;
+};
+
+const createLocalDateTimestamp = (
+  year: number,
+  month: number,
+  day: number
+) => {
+  const date = new Date(year, month - 1, day);
+  date.setHours(0, 0, 0, 0);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date.getTime();
+};
+
+const parseEventPeriod = (eventDate: string): EventPeriod => {
+  const normalized = eventDate.trim();
+
+  const fullDatePattern =
+    /(\d{4})\s*(?:[-./]|년)\s*(\d{1,2})\s*(?:[-./]|월)\s*(\d{1,2})\s*(?:일)?/g;
+
+  const fullDates = Array.from(normalized.matchAll(fullDatePattern))
+    .map((match) =>
+      createLocalDateTimestamp(
+        Number(match[1]),
+        Number(match[2]),
+        Number(match[3])
+      )
+    )
+    .filter((value): value is number => value !== null);
+
+  if (fullDates.length >= 2) {
+    return {
+      start: fullDates[0],
+      end: fullDates[1],
+    };
+  }
+
+  const start = fullDates[0] ?? null;
+
+  if (start === null) {
+    return { start: null, end: null };
+  }
+
+  const rangeParts = normalized.split(/[~～]/);
+
+  if (rangeParts.length < 2) {
+    return { start, end: start };
+  }
+
+  const endText = rangeParts.slice(1).join("~").trim();
+  const endMatch = endText.match(
+    /^(?:(\d{4})\s*(?:[-./]|년)\s*)?(\d{1,2})\s*(?:[-./]|월)\s*(\d{1,2})\s*(?:일)?/
+  );
+
+  if (!endMatch) {
+    return { start, end: start };
+  }
+
+  const startDate = new Date(start);
+  const endYear = endMatch[1]
+    ? Number(endMatch[1])
+    : startDate.getFullYear();
+  const endMonth = Number(endMatch[2]);
+  const endDay = Number(endMatch[3]);
+  const end = createLocalDateTimestamp(endYear, endMonth, endDay);
+
+  return {
+    start,
+    end: end ?? start,
+  };
+};
+
+const sortEventsByCurrentDate = (items: EventItem[]) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayTimestamp = today.getTime();
+
+  return [...items].sort((a, b) => {
+    const featuredDifference =
+      Number(Boolean(b.is_featured)) - Number(Boolean(a.is_featured));
+
+    if (featuredDifference !== 0) {
+      return featuredDifference;
+    }
+
+    const aHasManualOrder =
+      typeof a.display_order === "number" &&
+      Number.isFinite(a.display_order);
+    const bHasManualOrder =
+      typeof b.display_order === "number" &&
+      Number.isFinite(b.display_order);
+
+    if (aHasManualOrder && bHasManualOrder) {
+      const manualDifference =
+        (a.display_order as number) - (b.display_order as number);
+
+      if (manualDifference !== 0) {
+        return manualDifference;
+      }
+    } else if (aHasManualOrder !== bHasManualOrder) {
+      return aHasManualOrder ? -1 : 1;
+    }
+
+    const aPeriod = parseEventPeriod(a.event_date);
+    const bPeriod = parseEventPeriod(b.event_date);
+
+    const getDateStatus = (period: EventPeriod) => {
+      if (period.start === null || period.end === null) {
+        return 3;
+      }
+
+      if (
+        period.start <= todayTimestamp &&
+        period.end >= todayTimestamp
+      ) {
+        return 0;
+      }
+
+      if (period.start > todayTimestamp) {
+        return 1;
+      }
+
+      return 2;
+    };
+
+    const aStatus = getDateStatus(aPeriod);
+    const bStatus = getDateStatus(bPeriod);
+
+    if (aStatus !== bStatus) {
+      return aStatus - bStatus;
+    }
+
+    if (aStatus === 0) {
+      const endDifference =
+        (aPeriod.end ?? Number.MAX_SAFE_INTEGER) -
+        (bPeriod.end ?? Number.MAX_SAFE_INTEGER);
+
+      if (endDifference !== 0) {
+        return endDifference;
+      }
+    }
+
+    if (aStatus === 1) {
+      const startDifference =
+        (aPeriod.start ?? Number.MAX_SAFE_INTEGER) -
+        (bPeriod.start ?? Number.MAX_SAFE_INTEGER);
+
+      if (startDifference !== 0) {
+        return startDifference;
+      }
+    }
+
+    if (aStatus === 2) {
+      const recentPastDifference =
+        (bPeriod.end ?? Number.MIN_SAFE_INTEGER) -
+        (aPeriod.end ?? Number.MIN_SAFE_INTEGER);
+
+      if (recentPastDifference !== 0) {
+        return recentPastDifference;
+      }
+    }
+
+    const aCreatedAt = a.created_at
+      ? new Date(a.created_at).getTime()
+      : 0;
+    const bCreatedAt = b.created_at
+      ? new Date(b.created_at).getTime()
+      : 0;
+
+    if (aCreatedAt !== bCreatedAt) {
+      return bCreatedAt - aCreatedAt;
+    }
+
+    return a.title.localeCompare(b.title, "ko");
+  });
+};
+
 export default function Home() {
   const [title, setTitle] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -47,9 +234,6 @@ export default function Home() {
       .from("events")
       .select("*")
       .eq("approved", true)
-      .order("is_featured", { ascending: false })
-      .order("display_order", { ascending: true, nullsFirst: false })
-      .order("event_date", { ascending: true })
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -57,7 +241,7 @@ export default function Home() {
       return;
     }
 
-    setEvents(data || []);
+    setEvents(sortEventsByCurrentDate(data || []));
   };
 
   const fetchSiteViewStats = async () => {
@@ -622,7 +806,7 @@ export default function Home() {
               rel="noopener noreferrer"
               className="rounded-2xl bg-green-600 px-5 py-4 font-bold text-white transition hover:bg-green-700"
             >
-              鎭安 이야기 블로그 ↗
+              有河의 鎭安 이야기 블로그 ↗
             </a>
           </div>
 
