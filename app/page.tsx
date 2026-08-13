@@ -746,23 +746,17 @@ export default function Home() {
                         {event.title}
                       </h3>
 
-                      <div className="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-gray-500 md:text-sm">
-                        <p
-                          className="min-w-0 flex-1 leading-relaxed"
-                          style={{
-                            display: "-webkit-box",
-                            WebkitLineClamp: 1,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden",
-                          }}
-                        >
-                          📍 {event.location}
-                        </p>
-
-                        <span className="shrink-0" title="조회수">
-                          👁 {event.views ?? 0}
-                        </span>
-                      </div>
+                      <p
+                        className="mb-2 text-[10px] font-semibold leading-relaxed text-gray-500 md:text-sm"
+                        style={{
+                          display: "-webkit-box",
+                          WebkitLineClamp: 1,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        📍 {event.location}
+                      </p>
 
                       <p
                         className="text-[10px] leading-relaxed text-gray-600 md:text-sm"
