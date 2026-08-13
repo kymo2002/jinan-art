@@ -43,6 +43,168 @@ type NoticeItem = {
   created_at?: string;
 };
 
+type EventPeriod = {
+  start: number | null;
+  end: number | null;
+};
+
+const createLocalDateTimestamp = (
+  year: number,
+  month: number,
+  day: number
+) => {
+  const date = new Date(year, month - 1, day);
+  date.setHours(0, 0, 0, 0);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date.getTime();
+};
+
+const parseEventPeriod = (eventDate: string): EventPeriod => {
+  const normalized = (eventDate || "").trim();
+
+  const fullDatePattern =
+    /(\d{4})\s*(?:[-./]|년)\s*(\d{1,2})\s*(?:[-./]|월)\s*(\d{1,2})\s*(?:일)?/g;
+
+  const fullDates = Array.from(normalized.matchAll(fullDatePattern))
+    .map((match) =>
+      createLocalDateTimestamp(
+        Number(match[1]),
+        Number(match[2]),
+        Number(match[3])
+      )
+    )
+    .filter((value): value is number => value !== null);
+
+  if (fullDates.length >= 2) {
+    return {
+      start: fullDates[0],
+      end: fullDates[1],
+    };
+  }
+
+  const start = fullDates[0] ?? null;
+
+  if (start === null) {
+    return { start: null, end: null };
+  }
+
+  const rangeParts = normalized.split(/[~～]/);
+
+  if (rangeParts.length < 2) {
+    return { start, end: start };
+  }
+
+  const endText = rangeParts.slice(1).join("~").trim();
+  const endMatch = endText.match(
+    /^(?:(\d{4})\s*(?:[-./]|년)\s*)?(\d{1,2})\s*(?:[-./]|월)\s*(\d{1,2})\s*(?:일)?/
+  );
+
+  if (!endMatch) {
+    return { start, end: start };
+  }
+
+  const startDate = new Date(start);
+  const endYear = endMatch[1]
+    ? Number(endMatch[1])
+    : startDate.getFullYear();
+  const endMonth = Number(endMatch[2]);
+  const endDay = Number(endMatch[3]);
+  const end = createLocalDateTimestamp(endYear, endMonth, endDay);
+
+  return {
+    start,
+    end: end ?? start,
+  };
+};
+
+const sortEventsNearestToToday = (items: EventItem[]) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayTimestamp = today.getTime();
+
+  const getStatus = (period: EventPeriod) => {
+    if (period.start === null || period.end === null) {
+      return 3;
+    }
+
+    if (period.start <= todayTimestamp && period.end >= todayTimestamp) {
+      return 0;
+    }
+
+    if (period.start > todayTimestamp) {
+      return 1;
+    }
+
+    return 2;
+  };
+
+  return [...items].sort((a, b) => {
+    const aPeriod = parseEventPeriod(a.event_date);
+    const bPeriod = parseEventPeriod(b.event_date);
+    const aStatus = getStatus(aPeriod);
+    const bStatus = getStatus(bPeriod);
+
+    // 진행 중 → 예정 → 종료 → 날짜 인식 불가
+    if (aStatus !== bStatus) {
+      return aStatus - bStatus;
+    }
+
+    // 진행 중: 종료일이 가까운 순
+    if (aStatus === 0) {
+      const aEnd = aPeriod.end ?? Number.MAX_SAFE_INTEGER;
+      const bEnd = bPeriod.end ?? Number.MAX_SAFE_INTEGER;
+
+      if (aEnd !== bEnd) {
+        return aEnd - bEnd;
+      }
+
+      const aStart = aPeriod.start ?? Number.MAX_SAFE_INTEGER;
+      const bStart = bPeriod.start ?? Number.MAX_SAFE_INTEGER;
+
+      if (aStart !== bStart) {
+        return aStart - bStart;
+      }
+    }
+
+    // 예정: 오늘 기준 가장 가까운 시작일 순
+    if (aStatus === 1) {
+      const aStart = aPeriod.start ?? Number.MAX_SAFE_INTEGER;
+      const bStart = bPeriod.start ?? Number.MAX_SAFE_INTEGER;
+
+      if (aStart !== bStart) {
+        return aStart - bStart;
+      }
+    }
+
+    // 종료: 최근에 끝난 행사부터
+    if (aStatus === 2) {
+      const aEnd = aPeriod.end ?? Number.MIN_SAFE_INTEGER;
+      const bEnd = bPeriod.end ?? Number.MIN_SAFE_INTEGER;
+
+      if (aEnd !== bEnd) {
+        return bEnd - aEnd;
+      }
+    }
+
+    const aCreatedAt = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bCreatedAt = b.created_at ? new Date(b.created_at).getTime() : 0;
+
+    if (aCreatedAt !== bCreatedAt) {
+      return bCreatedAt - aCreatedAt;
+    }
+
+    return a.title.localeCompare(b.title, "ko");
+  });
+};
+
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<"events" | "memory" | "notices">(
     "events"
@@ -262,28 +424,65 @@ export default function AdminPage() {
     return data.publicUrl;
   };
 
+  const applyNearestDateOrder = async () => {
+    const { data, error } = await supabase
+      .from("events")
+      .select("*")
+      .eq("approved", true)
+      .eq("is_featured", false);
+
+    if (error) {
+      throw error;
+    }
+
+    const orderedEvents = sortEventsNearestToToday(data || []);
+
+    const updateResults = await Promise.all(
+      orderedEvents.map((event, index) =>
+        supabase
+          .from("events")
+          .update({ display_order: index + 1 })
+          .eq("id", event.id)
+      )
+    );
+
+    const failedResult = updateResults.find((result) => result.error);
+
+    if (failedResult?.error) {
+      throw failedResult.error;
+    }
+  };
+
   const approveEvent = async (id: string) => {
     setIsSaving(true);
 
-    const { error } = await supabase
-      .from("events")
-      .update({
-        approved: true,
-        is_featured: false,
-        display_order: null,
-      })
-      .eq("id", id);
+    try {
+      const { error } = await supabase
+        .from("events")
+        .update({
+          approved: true,
+          is_featured: false,
+          display_order: null,
+        })
+        .eq("id", id);
 
-    setIsSaving(false);
+      if (error) {
+        throw error;
+      }
 
-    if (error) {
+      // 새 행사 승인 직후 전체 일반 행사를 오늘 기준 가까운 날짜순으로 자동 재정렬
+      await applyNearestDateOrder();
+
+      alert(
+        "승인 완료. 오늘 기준으로 가장 가까운 행사일 순서로 자동 정렬했습니다."
+      );
+      await fetchEvents();
+    } catch (error) {
       console.log(error);
-      alert("승인 실패");
-      return;
+      alert("승인 또는 자동 날짜순 정렬에 실패했습니다.");
+    } finally {
+      setIsSaving(false);
     }
-
-    alert("승인 완료. 행사 날짜순으로 자동 배치됩니다.");
-    fetchEvents();
   };
 
   const cancelApproveEvent = async (id: string) => {
@@ -365,7 +564,7 @@ export default function AdminPage() {
 
   const resetEventsToDateOrder = async () => {
     const confirmed = window.confirm(
-      "관리자가 지정한 일반 행사 순서를 해제하고 행사 날짜순으로 자동정렬하시겠습니까? 맨앞 고정 행사는 그대로 유지됩니다."
+      "맨앞 고정 행사를 제외하고, 오늘을 기준으로 진행 중 행사 → 가장 가까운 예정 행사 → 최근 종료 행사 순으로 다시 정렬하시겠습니까?"
     );
 
     if (!confirmed) {
@@ -374,22 +573,19 @@ export default function AdminPage() {
 
     setIsSaving(true);
 
-    const { error } = await supabase
-      .from("events")
-      .update({ display_order: null })
-      .eq("approved", true)
-      .eq("is_featured", false);
+    try {
+      await applyNearestDateOrder();
 
-    setIsSaving(false);
-
-    if (error) {
+      alert(
+        "오늘 기준으로 진행 중 행사와 가장 가까운 예정 행사부터 정렬했습니다."
+      );
+      await fetchEvents();
+    } catch (error) {
       console.log(error);
-      alert("날짜순 자동정렬 전환에 실패했습니다.");
-      return;
+      alert("오늘 기준 날짜순 정렬에 실패했습니다.");
+    } finally {
+      setIsSaving(false);
     }
-
-    alert("문화소식이 행사 날짜순으로 자동정렬됩니다.");
-    fetchEvents();
   };
 
   const saveRegularOrder = async (orderedEvents: EventItem[]) => {
@@ -1012,8 +1208,8 @@ export default function AdminPage() {
               <div>
                 <h2 className="text-3xl font-black">문화행사 관리</h2>
                 <p className="mt-2 text-sm leading-6 text-gray-500">
-                  새로 승인한 문화소식은 행사 날짜순으로 자동 배치됩니다.
-                  ▲·▼ 버튼을 누르면 관리자가 지정한 순서가 우선 적용됩니다.
+                  날짜순 정렬을 누르면 오늘 기준으로 진행 중 행사와 가장 가까운 예정 행사가 먼저 배치됩니다.
+                  이후 ▲·▼ 버튼으로 관리자가 원하는 순서로 다시 조정할 수 있습니다.
                 </p>
               </div>
 
@@ -1023,7 +1219,7 @@ export default function AdminPage() {
                 disabled={isSaving}
                 className="shrink-0 rounded-2xl bg-blue-600 px-5 py-4 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                날짜순 자동정렬
+                오늘 기준 날짜순 정렬
               </button>
             </div>
 
