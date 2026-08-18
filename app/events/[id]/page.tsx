@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type EventItem = {
@@ -19,17 +19,21 @@ type EventItem = {
   upload_type?: string;
   video_url?: string;
   created_at?: string;
-  views?: number;
 };
 
 export default function EventDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const eventId = params?.id;
 
   const [event, setEvent] = useState<EventItem | null>(null);
+  const [allEvents, setAllEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [imageOpen, setImageOpen] = useState(false);
   const [message, setMessage] = useState("");
+
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
 
   useEffect(() => {
     if (!eventId) {
@@ -56,39 +60,42 @@ export default function EventDetailPage() {
         return;
       }
 
-      let currentEvent = data as EventItem;
-      const viewStorageKey = `jinan-art-viewed-event-${eventId}`;
-      const alreadyCounted =
-        typeof window !== "undefined" &&
-        window.sessionStorage.getItem(viewStorageKey) === "true";
-
-      if (!alreadyCounted) {
-        const { data: updatedViews, error: viewError } = await supabase.rpc(
-          "increment_event_views",
-          { event_id_input: eventId }
-        );
-
-        if (viewError) {
-          console.error("조회수 증가 실패:", viewError);
-        } else {
-          currentEvent = {
-            ...currentEvent,
-            views:
-              typeof updatedViews === "number"
-                ? updatedViews
-                : (currentEvent.views ?? 0) + 1,
-          };
-
-          window.sessionStorage.setItem(viewStorageKey, "true");
-        }
-      }
-
-      setEvent(currentEvent);
+      setEvent(data as EventItem);
       setLoading(false);
     };
 
     fetchEvent();
   }, [eventId]);
+
+  useEffect(() => {
+    const fetchAllEvents = async () => {
+      const { data, error } = await supabase
+        .from("events")
+        .select("*")
+        .eq("approved", true);
+
+      if (error) {
+        console.error("행사 목록 불러오기 실패:", error);
+        return;
+      }
+
+      const sortedEvents = ((data || []) as EventItem[]).sort((a, b) => {
+        const aDate = a.start_date || a.event_date || "";
+        const bDate = b.start_date || b.event_date || "";
+
+        const dateCompare = aDate.localeCompare(bDate);
+        if (dateCompare !== 0) {
+          return dateCompare;
+        }
+
+        return (a.created_at || "").localeCompare(b.created_at || "");
+      });
+
+      setAllEvents(sortedEvents);
+    };
+
+    fetchAllEvents();
+  }, []);
 
   useEffect(() => {
     if (!imageOpen) {
@@ -109,6 +116,66 @@ export default function EventDetailPage() {
       window.removeEventListener("keydown", closeWithEscape);
     };
   }, [imageOpen]);
+
+  const currentIndex = allEvents.findIndex((item) => item.id === eventId);
+  const previousEvent =
+    currentIndex > 0 ? allEvents[currentIndex - 1] : null;
+  const nextEvent =
+    currentIndex >= 0 && currentIndex < allEvents.length - 1
+      ? allEvents[currentIndex + 1]
+      : null;
+
+  const goToPreviousEvent = () => {
+    if (previousEvent) {
+      router.push(`/events/${previousEvent.id}`);
+    }
+  };
+
+  const goToNextEvent = () => {
+    if (nextEvent) {
+      router.push(`/events/${nextEvent.id}`);
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLElement>) => {
+    if (imageOpen) {
+      return;
+    }
+
+    const touch = e.touches[0];
+    touchStartX.current = touch.clientX;
+    touchStartY.current = touch.clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLElement>) => {
+    if (
+      imageOpen ||
+      touchStartX.current === null ||
+      touchStartY.current === null
+    ) {
+      return;
+    }
+
+    const touch = e.changedTouches[0];
+    const deltaX = touch.clientX - touchStartX.current;
+    const deltaY = touch.clientY - touchStartY.current;
+
+    touchStartX.current = null;
+    touchStartY.current = null;
+
+    const isHorizontalSwipe =
+      Math.abs(deltaX) >= 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.25;
+
+    if (!isHorizontalSwipe) {
+      return;
+    }
+
+    if (deltaX < 0) {
+      goToNextEvent();
+    } else {
+      goToPreviousEvent();
+    }
+  };
 
   const copyLink = async () => {
     try {
@@ -159,7 +226,11 @@ export default function EventDetailPage() {
       : event.event_date;
 
   return (
-    <main className="min-h-screen bg-gray-100 px-4 py-8 text-black md:py-14">
+    <main
+      className="min-h-screen bg-gray-100 px-4 py-8 text-black md:py-14"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <article className="mx-auto max-w-5xl overflow-hidden rounded-3xl bg-white shadow-xl">
         <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between md:px-10">
           <Link
@@ -233,14 +304,6 @@ export default function EventDetailPage() {
               </div>
             </div>
 
-            <div className="flex gap-3">
-              <span aria-hidden="true">👁</span>
-              <div>
-                <p className="mb-1 font-bold text-gray-900">조회수</p>
-                <p className="text-gray-600">{event.views ?? 0}</p>
-              </div>
-            </div>
-
             {event.author && (
               <div className="flex gap-3">
                 <span aria-hidden="true">✍️</span>
@@ -258,6 +321,51 @@ export default function EventDetailPage() {
               {event.description}
             </p>
           </section>
+
+          <div className="mb-7 border-t border-gray-100 pt-7">
+            <p className="mb-4 text-center text-xs font-bold text-gray-400 md:hidden">
+              화면을 좌우로 밀어 이전·다음 행사를 볼 수 있습니다
+            </p>
+
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              {previousEvent ? (
+                <Link
+                  href={`/events/${previousEvent.id}`}
+                  className="flex min-h-14 items-center justify-center rounded-2xl border border-gray-300 px-2 py-3 text-center text-sm font-bold text-gray-700 transition hover:bg-gray-100 sm:px-5 sm:text-base"
+                >
+                  <span className="mr-1" aria-hidden="true">〈</span>
+                  이전 행사
+                </Link>
+              ) : (
+                <div className="flex min-h-14 items-center justify-center rounded-2xl border border-gray-200 px-2 py-3 text-center text-sm font-bold text-gray-300 sm:px-5 sm:text-base">
+                  <span className="mr-1" aria-hidden="true">〈</span>
+                  이전 행사
+                </div>
+              )}
+
+              <Link
+                href="/#events"
+                className="flex min-h-14 items-center justify-center rounded-2xl bg-black px-2 py-3 text-center text-sm font-bold text-white transition hover:bg-gray-800 sm:px-5 sm:text-base"
+              >
+                행사목록
+              </Link>
+
+              {nextEvent ? (
+                <Link
+                  href={`/events/${nextEvent.id}`}
+                  className="flex min-h-14 items-center justify-center rounded-2xl border border-gray-300 px-2 py-3 text-center text-sm font-bold text-gray-700 transition hover:bg-gray-100 sm:px-5 sm:text-base"
+                >
+                  다음 행사
+                  <span className="ml-1" aria-hidden="true">〉</span>
+                </Link>
+              ) : (
+                <div className="flex min-h-14 items-center justify-center rounded-2xl border border-gray-200 px-2 py-3 text-center text-sm font-bold text-gray-300 sm:px-5 sm:text-base">
+                  다음 행사
+                  <span className="ml-1" aria-hidden="true">〉</span>
+                </div>
+              )}
+            </div>
+          </div>
 
           <div className="flex flex-col gap-3 border-t border-gray-100 pt-7 sm:flex-row sm:flex-wrap">
             <button
