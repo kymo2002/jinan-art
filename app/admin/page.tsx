@@ -457,29 +457,123 @@ export default function AdminPage() {
     setIsSaving(true);
 
     try {
-      const { error } = await supabase
+      // 승인할 새 행사 정보
+      const { data: newEvent, error: newEventError } = await supabase
+        .from("events")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (newEventError || !newEvent) {
+        throw newEventError || new Error("새 행사 정보를 찾을 수 없습니다.");
+      }
+
+      // 현재 관리자가 정해 놓은 기존 행사 순서는 그대로 가져온다.
+      const { data: approvedEvents, error: orderError } = await supabase
+        .from("events")
+        .select("*")
+        .eq("approved", true)
+        .eq("is_featured", false)
+        .order("display_order", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: true });
+
+      if (orderError) {
+        throw orderError;
+      }
+
+      const currentOrder = (approvedEvents || []) as EventItem[];
+      const candidateEvent: EventItem = {
+        ...(newEvent as EventItem),
+        approved: true,
+        is_featured: false,
+      };
+
+      // 날짜 기준으로만 보면 새 행사가 어느 위치인지 계산한다.
+      // 기존 행사들의 실제 관리자 순서는 이 계산으로 바꾸지 않는다.
+      const dateSorted = sortEventsNearestToToday([
+        ...currentOrder,
+        candidateEvent,
+      ]);
+
+      const dateRank = new Map(
+        dateSorted.map((event, index) => [event.id, index])
+      );
+      const newRank = dateRank.get(candidateEvent.id) ?? dateSorted.length - 1;
+
+      // 기존 관리자 순서를 유지한 상태에서 새 행사만 끼워 넣을 위치를 찾는다.
+      // 새 행사를 각 위치에 넣었을 때 날짜 기준 어긋남이 가장 적은 위치를 선택한다.
+      let insertIndex = currentOrder.length;
+      let bestPenalty = Number.MAX_SAFE_INTEGER;
+
+      for (let index = 0; index <= currentOrder.length; index += 1) {
+        let penalty = 0;
+
+        currentOrder.forEach((event, currentIndex) => {
+          const rank = dateRank.get(event.id);
+
+          if (rank === undefined) {
+            return;
+          }
+
+          if (currentIndex < index && rank > newRank) {
+            penalty += 1;
+          }
+
+          if (currentIndex >= index && rank < newRank) {
+            penalty += 1;
+          }
+        });
+
+        if (penalty < bestPenalty) {
+          bestPenalty = penalty;
+          insertIndex = index;
+        }
+      }
+
+      const orderedWithNewEvent = [
+        ...currentOrder.slice(0, insertIndex),
+        candidateEvent,
+        ...currentOrder.slice(insertIndex),
+      ];
+
+      // 먼저 새 행사를 승인한다.
+      const { error: approveError } = await supabase
         .from("events")
         .update({
           approved: true,
           is_featured: false,
-          display_order: null,
+          display_order: insertIndex + 1,
         })
         .eq("id", id);
 
-      if (error) {
-        throw error;
+      if (approveError) {
+        throw approveError;
       }
 
-      // 새 행사 승인 직후 전체 일반 행사를 오늘 기준 가까운 날짜순으로 자동 재정렬
-      await applyNearestDateOrder();
+      // 기존 행사끼리의 상대 순서는 건드리지 않고,
+      // 새 행사 삽입 때문에 필요한 번호만 1,2,3...으로 다시 매긴다.
+      const updateResults = await Promise.all(
+        orderedWithNewEvent.map((event, index) =>
+          supabase
+            .from("events")
+            .update({ display_order: index + 1 })
+            .eq("id", event.id)
+        )
+      );
+
+      const failedResult = updateResults.find((result) => result.error);
+
+      if (failedResult?.error) {
+        throw failedResult.error;
+      }
 
       alert(
-        "승인 완료. 오늘 기준으로 가장 가까운 행사일 순서로 자동 정렬했습니다."
+        "승인 완료. 기존 관리자 순서는 유지하고 새 행사만 오늘 기준 가까운 날짜 위치에 배치했습니다."
       );
       await fetchEvents();
     } catch (error) {
       console.log(error);
-      alert("승인 또는 자동 날짜순 정렬에 실패했습니다.");
+      alert("승인 또는 새 행사 순서 배치에 실패했습니다.");
     } finally {
       setIsSaving(false);
     }
